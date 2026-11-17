@@ -1,0 +1,139 @@
+<%- include("partials/header",{title:"Quản trị"}) %>
+<main class="wrap page">
+  <div class="page-title">
+    <span class="eyebrow red">CONTROL CENTER</span>
+    <h1>Quản trị hệ thống</h1>
+    <p>Quản lý danh mục, kho tài khoản, đơn hàng và giao dịch VNPay.</p>
+  </div>
+
+  <div class="stats admin-stats">
+    <div class="stat"><small>Mặt hàng</small><strong><%= stats.products %></strong></div>
+    <div class="stat"><small>Tài khoản còn kho</small><strong><%= stats.inventory %></strong></div>
+    <div class="stat"><small>Thành viên</small><strong><%= stats.users %></strong></div>
+    <div class="stat"><small>Đơn hàng</small><strong><%= stats.orders %></strong></div>
+    <div class="stat"><small>Doanh thu</small><strong><%= money(stats.revenue) %></strong></div>
+  </div>
+
+  <section class="panel">
+    <h2>Danh mục và tồn kho</h2>
+    <p class="admin-help">Tồn kho được tính từ số tài khoản đã nhập mã hóa. Sản phẩm cũ không có thông tin giao hàng sẽ không được bán.</p>
+    <% if(categories.length){ %>
+      <div class="admin-category-list">
+        <% categories.forEach(category=>{ %>
+          <div><strong><%= category.name %></strong><span><%= category.stock %> tài khoản</span></div>
+        <% }) %>
+      </div>
+    <% }else{ %><p class="empty">Chưa có danh mục có hàng.</p><% } %>
+  </section>
+
+  <section class="panel">
+    <h2>Thêm sản phẩm</h2>
+    <p class="admin-help">Nhập mỗi tài khoản theo dòng <code>tên đăng nhập|mật khẩu</code>. Dữ liệu được mã hóa trước khi lưu và chỉ giao cho khách sau khi mua.</p>
+    <form class="admin-form" method="post" action="/admin/san-pham">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <label>Danh mục / game<input name="game" required maxlength="60" placeholder="Free Fire"></label>
+      <label>Tên sản phẩm<input name="name" required maxlength="120"></label>
+      <label>Giá (VNĐ)<input name="price" type="number" min="1000" max="50000000" required></label>
+      <label>Link ảnh<input name="image" maxlength="500" placeholder="https://..."></label>
+      <label class="wide">Mô tả<input name="description" maxlength="1000"></label>
+      <label class="wide">Tên đăng nhập và mật khẩu tài khoản (mỗi dòng: tài khoản|mật khẩu)<textarea name="accounts" rows="5" maxlength="80000" placeholder="email@example.com|mat-khau"></textarea></label>
+      <button class="btn btn-red" type="submit">Thêm sản phẩm</button>
+    </form>
+  </section>
+
+  <section class="panel">
+    <h2>Quản lý sản phẩm và kho tài khoản</h2>
+    <div class="table-wrap">
+      <table class="admin-products-table">
+        <thead><tr><th>Mã</th><th>Thông tin sản phẩm</th><th>Thao tác</th></tr></thead>
+        <tbody>
+          <% products.forEach(p=>{ %>
+            <tr>
+              <td>#<%= p.id %></td>
+              <td>
+                <form class="admin-product-form" method="post" action="/admin/san-pham/<%= p.id %>/cap-nhat">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <label>Danh mục<input name="game" value="<%= p.game %>" required maxlength="60"></label>
+                  <label>Tên sản phẩm<input name="name" value="<%= p.name %>" required maxlength="120"></label>
+                  <label>Giá<input name="price" type="number" min="1000" max="50000000" value="<%= p.price %>" required></label>
+                  <label>Link ảnh<input name="image" value="<%= p.image %>" maxlength="500"></label>
+                  <label class="wide">Mô tả<input name="description" value="<%= p.description %>" maxlength="1000"></label>
+                  <label class="wide">Thêm tài khoản/mật khẩu vào kho (mỗi dòng: tài khoản|mật khẩu)<textarea name="accounts" rows="3" maxlength="80000" placeholder="email@example.com|mat-khau"></textarea></label>
+                  <button class="btn btn-small btn-red" type="submit">Lưu / thêm kho</button>
+                </form>
+                <small class="admin-status">Còn <%= p.stock %> tài khoản</small>
+              </td>
+              <td>
+                <form method="post" action="/admin/san-pham/<%= p.id %>/xoa" onsubmit="return confirm('Xóa sản phẩm này?')">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button class="btn btn-small btn-outline" type="submit">Xóa</button>
+                </form>
+              </td>
+            </tr>
+          <% }) %>
+          <% if(!products.length){ %><tr><td colspan="3" class="empty">Chưa có sản phẩm. Hãy thêm hàng hóa thật trước khi mở bán.</td></tr><% } %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Giao dịch nạp tiền</h2>
+    <p class="admin-help">Số dư chỉ được cộng sau khi VNPay IPN hoặc SePay webhook xác thực giao dịch, số tiền khớp và mã giao dịch chưa xử lý. Không xác nhận giao dịch thủ công.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Mã giao dịch</th><th>Thành viên</th><th>Số tiền</th><th>Phương thức</th><th>Ngân hàng</th><th>Trạng thái</th><th>Thời gian</th></tr></thead>
+        <tbody>
+          <% topups.forEach(t=>{ const u=users.find(x=>x.id===t.userId); %>
+            <tr>
+              <td><%= t.transactionNo||t.id %></td><td><%= u?u.email:"Không rõ" %></td><td><%= money(t.amount) %></td>
+              <td><%= t.method %></td>
+              <td><%= t.bankCode||"—" %></td>
+              <td><%= t.status==="paid"?"Đã thanh toán":t.status==="pending"?"Đang chờ":t.status==="failed"?"Thất bại":t.status %></td>
+              <td><%= new Date(t.paidAt||t.createdAt).toLocaleString("vi-VN") %></td>
+            </tr>
+          <% }) %>
+          <% if(!topups.length){ %><tr><td colspan="7" class="empty">Chưa có giao dịch nạp.</td></tr><% } %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Đơn hàng</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Mã</th><th>Sản phẩm</th><th>Giá</th><th>Trạng thái</th><th>Ngày</th></tr></thead>
+        <tbody>
+          <% orders.forEach(o=>{ %><tr><td>#<%= o.id %></td><td><%= o.productName %></td><td><%= money(o.price) %></td><td><%= o.status %></td><td><%= new Date(o.createdAt).toLocaleDateString("vi-VN") %></td></tr><% }) %>
+          <% if(!orders.length){ %><tr><td colspan="5" class="empty">Chưa có đơn hàng.</td></tr><% } %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Thành viên</h2>
+    <p class="admin-help">Xóa tài khoản sẽ chặn thành viên đăng nhập; lịch sử đơn hàng và giao dịch nạp tiền vẫn được lưu.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Tên</th><th>Email</th><th>Số dư</th><th>Thao tác</th></tr></thead>
+        <tbody>
+          <% users.filter(u=>u.role!=="admin").forEach(u=>{ %>
+            <tr>
+              <td><%= u.name %></td><td><%= u.email %></td><td><%= money(u.balance) %></td>
+              <td>
+                <form method="post" action="/admin/thanh-vien/<%= u.id %>/xoa" onsubmit="return confirm('Xóa tài khoản thành viên này? Lịch sử giao dịch sẽ được giữ lại.')">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button class="btn btn-small btn-red" type="submit">Xóa thành viên</button>
+                </form>
+              </td>
+            </tr>
+          <% }) %>
+          <% if(!users.some(u=>u.role!=="admin")){ %><tr><td colspan="4" class="empty">Chưa có thành viên.</td></tr><% } %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+<%- include("partials/footer") %>

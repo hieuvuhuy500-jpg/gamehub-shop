@@ -1,0 +1,22 @@
+<%- include("partials/header",{title:"Chuyển khoản ngân hàng"}) %>
+<main class="wrap page narrow">
+  <div class="page-title">
+    <span class="eyebrow red">GTN BANK TRANSFER</span>
+    <h1>Hoàn tất chuyển khoản</h1>
+    <p>Ví sẽ được cộng sau khi SePay xác minh khoản tiền vào đúng tài khoản và nội dung.</p>
+  </div>
+  <section class="panel bank-transfer-panel">
+    <img class="bank-transfer-qr" src="<%= qrUrl %>" alt="Mã QR chuyển khoản GTN">
+    <dl class="delivery-details">
+      <dt>Ngân hàng</dt><dd><%= bank.code %></dd>
+      <dt>Số tài khoản</dt><dd><code><%= bank.accountNumber %></code></dd>
+      <dt>Chủ tài khoản</dt><dd><%= bank.accountName %></dd>
+      <dt>Số tiền</dt><dd><strong><%= money(topup.amount) %></strong></dd>
+      <dt>Nội dung chuyển khoản</dt><dd><code><%= topup.bankReference %></code></dd>
+      <dt>Trạng thái</dt><dd><%= topup.status==="paid"?"Đã xác nhận":"Đang chờ xác nhận" %></dd>
+    </dl>
+    <p class="safe-note">Chuyển đúng số tiền và giữ nguyên nội dung chuyển khoản. Không chuyển sang tài khoản khác. Không tạo thêm giao dịch nếu lệnh này đang chờ xác nhận.</p>
+    <a class="btn btn-outline full" href="/tai-khoan">Xem lịch sử nạp tiền</a>
+  </section>
+</main>
+<%- include("partials/footer") %>

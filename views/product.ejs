@@ -1,0 +1,29 @@
+<%- include("partials/header",{title:product.name}) %>
+<main class="wrap page">
+  <a class="back" href="/">← Quay lại cửa hàng</a>
+  <div class="detail">
+    <div class="detail-img"><img src="<%= product.image %>" alt="<%= product.name %>" onerror="this.onerror=null;this.src='/images/gamehub-placeholder.svg'"></div>
+    <div class="detail-info">
+      <span class="eyebrow red"><%= product.game %> · SẢN PHẨM #<%= product.id %></span>
+      <h1><%= product.name %></h1>
+      <p><%= product.description %></p>
+      <div class="price-big"><%= money(product.price) %></div>
+      <p class="stock-status <%= product.stock>0?'in-stock':'out-of-stock' %>">
+        <%= product.stock>0?`Còn ${product.stock} sản phẩm`:"Tạm hết hàng" %>
+      </p>
+      <div class="safe-note">Thông tin tài khoản được giao riêng trong trang tài khoản sau khi mua thành công. Hãy đổi mật khẩu ngay sau khi nhận.</div>
+      <% if(product.stock>0&&user){ %>
+        <form method="post" action="/mua/<%= product.id %>">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <button class="btn btn-red full" type="submit">Mua bằng số dư ví</button>
+        </form>
+        <a class="btn btn-outline full" href="/nap-tien">Nạp tiền vào ví</a>
+      <% }else if(product.stock>0){ %>
+        <a class="btn btn-red full" href="/dang-nhap">Đăng nhập để mua</a>
+      <% }else{ %>
+        <a class="btn btn-outline full" href="/">Xem sản phẩm khác</a>
+      <% } %>
+    </div>
+  </div>
+</main>
+<%- include("partials/footer") %>

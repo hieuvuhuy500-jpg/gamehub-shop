@@ -1,0 +1,60 @@
+<%- include("partials/header",{title:"Tài khoản của tôi"}) %>
+<main class="wrap page">
+  <div class="page-title">
+    <span class="eyebrow red">MEMBER CENTER</span>
+    <h1>Tài khoản của tôi</h1>
+    <p>Quản lý số dư, đơn hàng và thông tin tài khoản đã mua.</p>
+  </div>
+  <div class="stats">
+    <div class="stat"><small>Số dư ví</small><strong><%= money(user.balance) %></strong><a href="/nap-tien">+ Nạp tiền</a></div>
+    <div class="stat"><small>Đơn hàng</small><strong><%= orders.length %></strong></div>
+    <div class="stat"><small>Hạng thành viên</small><strong>MEMBER</strong></div>
+  </div>
+  <section class="panel">
+    <h2>Đơn hàng và thông tin giao</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Mã đơn</th><th>Sản phẩm / thông tin tài khoản</th><th>Giá</th><th>Trạng thái</th><th>Ngày</th></tr></thead>
+        <tbody>
+          <% orders.forEach(o=>{ %>
+            <tr>
+              <td>#<%= o.id %></td>
+              <td>
+                <strong><%= o.productName %></strong>
+                <% if(o.delivery){ %>
+                  <dl class="delivery-details">
+                    <dt>Tên đăng nhập</dt><dd><code><%= o.delivery.username %></code></dd>
+                    <dt>Mật khẩu</dt><dd><code><%= o.delivery.password %></code></dd>
+                  </dl>
+                  <small>Đổi mật khẩu ngay sau khi đăng nhập.</small>
+                <% } %>
+              </td>
+              <td><%= money(o.price) %></td>
+              <td><span class="pill green"><%= o.status %></span></td>
+              <td><%= new Date(o.createdAt).toLocaleDateString("vi-VN") %></td>
+            </tr>
+          <% }) %>
+          <% if(!orders.length){ %><tr><td colspan="5" class="empty">Bạn chưa có đơn hàng.</td></tr><% } %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+  <section class="panel">
+    <h2>Lịch sử nạp tiền</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Mã</th><th>Số tiền</th><th>Phương thức</th><th>Trạng thái</th></tr></thead>
+        <tbody>
+          <% topups.forEach(t=>{ %>
+            <tr>
+              <td>#<%= t.id %></td><td><%= money(t.amount) %></td><td><%= t.method %><% if(t.bankReference){ %><br><small>Mã CK: <%= t.bankReference %></small><% } %></td>
+              <td><span class="pill <%= t.status==='paid'?'green':'' %>"><%= t.status==='paid'?'Đã thanh toán':t.status==='pending'?'Đang xác nhận':t.status==='failed'?'Thất bại':t.status %></span></td>
+            </tr>
+          <% }) %>
+          <% if(!topups.length){ %><tr><td colspan="4" class="empty">Chưa có yêu cầu nạp tiền.</td></tr><% } %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+<%- include("partials/footer") %>

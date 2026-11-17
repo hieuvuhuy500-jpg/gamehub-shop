@@ -1,0 +1,25 @@
+<%- include("partials/header",{title:"Bảng xếp hạng"}) %>
+<main class="wrap page narrow">
+  <div class="page-title">
+    <span class="eyebrow red">GTN MEMBER</span>
+    <h1>Bảng xếp hạng nạp tiền</h1>
+    <p>Chỉ tính các giao dịch nạp tiền được máy chủ xác minh thành công. Tên thành viên được ẩn một phần.</p>
+  </div>
+  <section class="panel leaderboard-page">
+    <% if(leaders.length){ %>
+      <ol class="leaderboard-list">
+        <% leaders.forEach(member=>{ %>
+          <li>
+            <span class="leaderboard-rank">#<%= member.rank %></span>
+            <span class="leaderboard-name"><%= member.name %></span>
+            <strong><%= money(member.total) %></strong>
+          </li>
+        <% }) %>
+      </ol>
+    <% }else{ %>
+      <p class="leaderboard-empty">Chưa có thành viên nào trên bảng xếp hạng.</p>
+    <% } %>
+    <a class="btn btn-outline full" href="/">Quay lại cửa hàng</a>
+  </section>
+</main>
+<%- include("partials/footer") %>

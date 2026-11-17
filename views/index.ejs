@@ -1,0 +1,95 @@
+<%- include("partials/header",{title:"Cửa hàng tài khoản game"}) %>
+<main class="wrap catalog-page">
+  <section class="store-hero">
+    <div class="store-hero-copy">
+      <span class="eyebrow red">GTN GAMING STORE · DANH MỤC TÀI KHOẢN</span>
+      <h1>Tìm tài khoản<br><em>game yêu thích</em></h1>
+      <p>Khám phá các lựa chọn tài khoản game với thông tin và mức giá được hiển thị rõ ràng.</p>
+      <a class="btn btn-red" href="#products">Khám phá sản phẩm <span aria-hidden="true">→</span></a>
+    </div>
+    <div class="store-hero-art" aria-hidden="true">
+      <div class="store-hero-wordmark"><strong>GTN</strong><span>GAMING STORE</span></div>
+    </div>
+  </section>
+
+  <section class="store-notice" aria-label="Thông tin cửa hàng">
+    <span class="store-notice-icon" aria-hidden="true">i</span>
+    <div>
+      <strong>Thông tin sản phẩm minh bạch</strong>
+      <p>Chỉ tài khoản có sẵn trong kho mới được hiển thị và bán.</p>
+    </div>
+  </section>
+
+  <section class="store-benefits" aria-label="Thông tin dịch vụ">
+    <div><span aria-hidden="true">⚙️</span><div><b>Thông tin sản phẩm</b><small>Mô tả và giá rõ ràng</small></div></div>
+    <div><span aria-hidden="true">🛒</span><div><b>Đơn hàng tự động</b><small>Thông tin đơn hàng trong tài khoản</small></div></div>
+    <div><span aria-hidden="true">💳</span><div><b>Nạp ví</b><small><%= paymentReady&&bankReady?"VNPay và chuyển khoản ngân hàng":paymentReady?"Thanh toán qua VNPay":bankReady?"Chuyển khoản qua SePay":"Phương thức thanh toán đang chờ cấu hình" %></small></div></div>
+  </section>
+
+  <section id="products" class="catalog-heading">
+    <div>
+      <span class="eyebrow red">GIAN HÀNG GTN</span>
+      <h2>Tài khoản đang có</h2>
+      <p>Chọn danh mục để tìm sản phẩm phù hợp.</p>
+    </div>
+    <div class="catalog-search-wrap">
+      <form class="search catalog-search" action="/" method="get" role="search">
+        <input id="catalog-search-input" name="q" value="<%= q %>" placeholder="Tìm game, tài khoản..." aria-label="Tìm game hoặc tài khoản" autocomplete="off" aria-autocomplete="list" aria-controls="product-search-results" aria-expanded="false">
+        <% if(game){ %><input type="hidden" name="game" value="<%= game %>"><% } %>
+        <button class="btn btn-red" type="submit">Tìm kiếm</button>
+      </form>
+      <div class="search-suggestions" id="product-search-results" role="listbox" aria-label="Kết quả tìm kiếm" hidden></div>
+    </div>
+  </section>
+
+  <div class="catalog-toolbar">
+    <nav class="filters" aria-label="Lọc theo game">
+      <a class="<%= !game?'active':'' %>" href="<%= allCategoryHref %>">Tất cả</a>
+      <% categories.forEach(category=>{ %>
+        <a class="<%= category.selected?'active':'' %>" href="<%= category.href %>"><%= category.name %><span><%= category.stock %></span></a>
+      <% }) %>
+    </nav>
+    <span class="catalog-count"><strong><%= products.reduce((total,p)=>total+p.stock,0) %></strong> tài khoản</span>
+  </div>
+
+  <div class="products">
+    <% if(!products.length){ %>
+      <div class="empty"><%= q||game?"Không tìm thấy sản phẩm phù hợp.":"Hiện chưa có tài khoản nào trong kho. Vui lòng quay lại sau." %></div>
+    <% } %>
+    <% products.forEach(p=>{ %>
+      <article class="product-card" id="product-<%= p.id %>" data-product-search="<%= `${p.name} ${p.game} ${p.description}` %>">
+        <a href="/san-pham/<%= p.id %>" class="product-img">
+          <img src="<%= p.image %>" alt="<%= p.name %>" onerror="this.onerror=null;this.src='/images/gamehub-placeholder.svg'">
+          <span><%= p.game %></span>
+        </a>
+        <div class="product-info">
+          <div class="product-meta"><small>MÃ #<%= p.id %></small><span>CÒN <%= p.stock %></span></div>
+          <h3><a href="/san-pham/<%= p.id %>"><%= p.name %></a></h3>
+          <p><%= p.description %></p>
+          <div class="product-bottom">
+            <div class="product-price"><small>Giá tham khảo</small><strong><%= money(p.price) %></strong></div>
+            <a class="btn btn-red" href="/san-pham/<%= p.id %>">Chi tiết <span aria-hidden="true">→</span></a>
+          </div>
+        </div>
+      </article>
+    <% }) %>
+  </div>
+
+  <section class="leaderboard-preview panel">
+    <div class="leaderboard-heading">
+      <div><span class="eyebrow red">THÀNH VIÊN GTN</span><h2>Bảng xếp hạng nạp tiền</h2></div>
+      <a class="btn btn-outline" href="/bang-xep-hang">Xem bảng đầy đủ</a>
+    </div>
+    <% if(topUsers.length){ %>
+      <ol class="leaderboard-list">
+        <% topUsers.forEach(member=>{ %>
+          <li><span class="leaderboard-rank">#<%= member.rank %></span><span class="leaderboard-name"><%= member.name %></span><strong><%= money(member.total) %></strong></li>
+        <% }) %>
+      </ol>
+    <% }else{ %>
+      <p class="leaderboard-empty">Chưa có giao dịch nạp tiền thành công.</p>
+    <% } %>
+  </section>
+
+</main>
+<%- include("partials/footer") %>

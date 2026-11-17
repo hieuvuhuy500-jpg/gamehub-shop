@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= typeof title!=="undefined"?title+" | GTN GAMING STORE":"GTN GAMING STORE" %></title>
+  <script>
+    try {
+      if (localStorage.getItem("gamehub-theme") === "dark") {
+        document.documentElement.dataset.theme = "dark";
+      }
+    } catch (error) {
+      console.warn("Không thể đọc tùy chọn giao diện đã lưu.", error);
+    }
+  </script>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap nav">
+    <a class="brand" href="/" aria-label="GTN Gaming Store - Trang chủ">
+      <span class="brand-copy"><strong>GTN</strong><small>GAMING STORE</small></span>
+    </a>
+    <nav>
+      <% if(user&&user.role==="admin"){ %>
+        <a href="/admin">Khu vực quản trị</a>
+        <a href="/">Cửa hàng</a>
+      <% }else{ %>
+        <a href="/">Sản phẩm</a>
+        <a href="/?game=Free%20Fire">Free Fire</a>
+        <a href="/?game=Liên%20Quân">Liên Quân</a>
+        <a href="/?game=PUBG">PUBG</a>
+        <a href="/bang-xep-hang">Xếp hạng</a>
+        <% if(!user){ %><a href="/nap-tien">Nạp tiền</a><% } %>
+      <% } %>
+    </nav>
+    <div class="nav-right">
+      <button class="btn btn-outline theme-toggle" id="theme-toggle" type="button" aria-label="Chuyển sang giao diện tối" aria-pressed="false" title="Chuyển sang giao diện tối">
+        <span class="theme-icon" aria-hidden="true">🌙</span>
+        <span class="theme-label">Tối</span>
+      </button>
+      <% if(user){ %>
+        <% if(user.role==="admin"){ %>
+          <a class="nav-user" href="/admin">Admin: <%= user.name %></a>
+          <a class="btn btn-dark" href="/">Cửa hàng</a>
+        <% }else{ %>
+          <a class="btn btn-red" href="/nap-tien">Nạp tiền</a>
+          <a class="nav-user" href="/tai-khoan">Tài khoản</a>
+        <% } %>
+        <form action="/dang-xuat" method="post"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-outline" type="submit">Thoát</button></form>
+      <% }else{ %>
+        <a href="/dang-nhap">Đăng nhập</a>
+        <a class="btn btn-red" href="/dang-ky">Đăng ký</a>
+      <% } %>
+    </div>
+  </div>
+</header>
+<% if(notice){ %><div class="notice wrap"><%= notice %></div><% } %>

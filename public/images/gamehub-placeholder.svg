@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" role="img" aria-labelledby="title">
+  <title id="title">GTN Gaming Store game artwork placeholder</title>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#171923"/>
+      <stop offset="1" stop-color="#61202f"/>
+    </linearGradient>
+    <radialGradient id="glow">
+      <stop offset="0" stop-color="#ff6570" stop-opacity=".85"/>
+      <stop offset="1" stop-color="#e63946" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="900" height="600" fill="url(#background)"/>
+  <circle cx="650" cy="210" r="250" fill="url(#glow)"/>
+  <path d="M288 352c8-52 45-88 91-88h142c46 0 83 36 91 88l10 65c5 33-29 54-56 34l-60-45H394l-60 45c-27 20-61-1-56-34z" fill="#f3f4f8" fill-opacity=".92"/>
+  <path d="M369 326v76m-38-38h76m147-15h2m-30 30h2" stroke="#e63946" stroke-linecap="round" stroke-width="16"/>
+  <text x="450" y="500" fill="#fff" font-family="Arial,sans-serif" font-size="38" font-weight="700" letter-spacing="8" text-anchor="middle">GTN STORE</text>
+</svg>
