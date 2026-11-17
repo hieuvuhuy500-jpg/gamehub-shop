@@ -2,18 +2,12 @@ services:
   - type: web
     name: gamehub-shop
     runtime: node
-    plan: starter
+    plan: free
     buildCommand: npm ci
     startCommand: npm start
-    disk:
-      name: gamehub-data
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
       - key: NODE_ENV
         value: production
-      - key: GAMEHUB_DATA_DIR
-        value: /var/data
       - key: SESSION_SECRET
         generateValue: true
       - key: ADMIN_EMAIL

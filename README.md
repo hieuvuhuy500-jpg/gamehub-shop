@@ -11,13 +11,13 @@ Chế độ `npm run dev` bỏ qua thư mục dữ liệu để Nodemon không k
 Lần đầu chạy, ứng dụng tạo tài khoản quản trị từ `ADMIN_EMAIL` và `ADMIN_PASSWORD`. Admin và khách đăng nhập tại `/dang-nhap`; tài khoản có quyền `admin` sẽ tự chuyển vào `/admin`, còn khách được chuyển đến trang tài khoản. Khu vực Admin không hiển thị trên giao diện khách và được bảo vệ theo quyền tài khoản. Không gửi nội dung `.env` hoặc khóa bí mật qua chat.
 
 ## Đưa website lên Internet bằng Render
-Render chạy website trên máy chủ đám mây nên khách vẫn truy cập được khi máy tính cá nhân tắt. Tệp `render.yaml` cấu hình ứng dụng Node, tự tạo `SESSION_SECRET` và gắn ổ đĩa lưu dữ liệu JSON tại `/var/data`. Cấu hình dùng gói có ổ đĩa bền vững; gói miễn phí không phù hợp vì dữ liệu cửa hàng có thể mất sau khi khởi động lại.
+Render chạy website trên máy chủ đám mây nên khách có thể truy cập khi máy tính cá nhân tắt. Tệp `render.yaml` cấu hình ứng dụng Node trên gói Free và tự tạo `SESSION_SECRET`; Render cấp URL `onrender.com` miễn phí, không cần mua tên miền riêng.
 1. Tạo kho GitHub mới và đưa các tệp trong thư mục `gamehub-shop` lên kho. Không đưa `.env`, `node_modules` hoặc dữ liệu riêng trong `data` lên GitHub.
-2. Tạo tài khoản Render, chọn **New > Blueprint**, kết nối kho GitHub và triển khai `render.yaml`.
+2. Tạo tài khoản Render, chọn **New > Blueprint**, kết nối kho GitHub và triển khai `render.yaml`. Nếu được hỏi, chọn gói Free.
 3. Khi Render hỏi biến môi trường, nhập `ADMIN_EMAIL`, `ADMIN_PASSWORD` mạnh và `DELIVERY_ENCRYPTION_KEY` gồm 64 ký tự hex. Tạo khóa mã hóa bằng lệnh `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`; lưu khóa an toàn và không đổi khóa sau khi đã nhập kho hàng.
 4. Chờ trạng thái triển khai thành công rồi mở URL `onrender.com` do Render cấp. Không cần bật máy tính cá nhân hay mua tên miền để dùng URL này.
 
-Ổ đĩa Render giữ dữ liệu sau khi khởi động lại, nhưng cơ sở dữ liệu vẫn là tệp JSON trên một máy chủ duy nhất; session đăng nhập sẽ bị xóa khi ứng dụng khởi động lại. Sao lưu dữ liệu định kỳ và chưa dùng cấu hình này cho giao dịch thật hoặc nhiều máy chủ nếu chưa chuyển sang database/session store production, kiểm thử khôi phục và hoàn tất cấu hình thanh toán HTTPS. Dữ liệu đang có trên máy cá nhân không tự được chuyển lên hosting.
+Đây chỉ là cấu hình thử nghiệm: dịch vụ Free có thể ngủ sau 15 phút không có truy cập và cần khoảng một phút để hoạt động lại. Hệ thống tệp là tạm thời; dữ liệu JSON như tài khoản, kho hàng và đơn hàng có thể mất khi dịch vụ ngủ, khởi động lại hoặc triển khai lại. Session đăng nhập cũng mất khi ứng dụng khởi động lại. Không nhập kho hàng thật, nhận tiền hoặc dùng cho bán hàng thực tế. Dữ liệu đang có trên máy cá nhân không tự được chuyển lên hosting. Trước khi mở bán, cần chuyển dữ liệu và session sang dịch vụ lưu trữ production bền vững, kiểm thử sao lưu/khôi phục và hoàn tất cấu hình thanh toán HTTPS.
 
 ## Chuẩn bị VPS Ubuntu và HTTPS cho khách
 Tên miền `hvv.com` hiện mới là tên dự kiến; VPS chưa được thuê và website chưa được đưa lên Internet. Khi đã sở hữu domain và VPS Ubuntu 24.04:
