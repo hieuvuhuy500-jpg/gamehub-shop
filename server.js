@@ -13,7 +13,6 @@ const { createSepayQrUrl, loadSepayConfig, parseSepayTransaction, processSepayTr
 const { createVnpayPaymentUrl, loadVnpayConfig, verifyVnpaySignature } = require("./lib/vnpay");
 
 const app = express();
-const PORT = process.env.PORT || 3000;
 const isProduction = process.env.NODE_ENV === "production";
 const DATA_DIR = process.env.GAMEHUB_DATA_DIR || path.join(__dirname, "data");
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -638,8 +637,12 @@ app.post("/admin/thanh-vien/:id/xoa",adminAuth,admin,(req,res)=>{
   res.redirect("/admin");
 });
 app.use((req,res)=>res.status(404).render("message",{title:"404",message:"Trang bạn tìm không tồn tại."}));
-seed().then(()=>{
-  app.listen(PORT,()=>console.log(`GTN GAMING SHOP đang chạy tại http://localhost:${PORT}`));
+const PORT = process.env.PORT || 3000;
+seed().then(() => {
+  app.listen(PORT, '0.0.0.0', () => console.log(`GTN GAMING SHOP dang chay tai port ${PORT}`));
+}).catch((error) => {
+  console.error("GTN GAMING SHOP failed to start.", error);
+  process.exitCode = 1;
 }).catch(error=>{
   console.error("GTN GAMING SHOP failed to start.",error);
   process.exitCode=1;
