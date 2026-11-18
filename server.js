@@ -7,24 +7,46 @@ const fs = require("fs");
 const path = require("path");
 const { isSameOriginRequest } = require("./lib/csrf");
 const { decryptAccount, encryptAccount, parseAccountEntries } = require("./lib/delivery");
+const { appendAccounts, findMatchingProduct } = require("./lib/inventory");
+const FileSessionStore = require("./lib/session-store");
 const { createSepayQrUrl, loadSepayConfig, parseSepayTransaction, processSepayTransaction, verifySepaySignature } = require("./lib/sepay");
 const { createVnpayPaymentUrl, loadVnpayConfig, verifyVnpaySignature } = require("./lib/vnpay");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const isProduction = process.env.NODE_ENV === "production";
-const sessionSecret = process.env.SESSION_SECRET;
-if (isProduction && (!sessionSecret || sessionSecret.length < 32)) {
+const DATA_DIR = process.env.GAMEHUB_DATA_DIR || path.join(__dirname, "data");
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+const sessionSecretFile = path.join(DATA_DIR, ".session-secret");
+const loadPersistentSessionSecret = () => {
+  try {
+    const storedSecret = fs.readFileSync(sessionSecretFile, "utf8").trim();
+    if (storedSecret) return storedSecret;
+    throw new Error("The stored session secret is empty.");
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+    const generatedSecret = crypto.randomBytes(48).toString("hex");
+    try {
+      fs.writeFileSync(sessionSecretFile, generatedSecret, { flag: "wx", mode: 0o600 });
+      return generatedSecret;
+    } catch (writeError) {
+      if (writeError.code !== "EEXIST") throw writeError;
+      return fs.readFileSync(sessionSecretFile, "utf8").trim();
+    }
+  }
+};
+const configuredSessionSecret = process.env.SESSION_SECRET;
+const sessionSecret = configuredSessionSecret || loadPersistentSessionSecret();
+if (isProduction && (!configuredSessionSecret || configuredSessionSecret.length < 32)) {
   throw new Error("Production requires a SESSION_SECRET with at least 32 characters.");
 }
 const vnpayConfig = loadVnpayConfig();
 const sepayConfig = loadSepayConfig();
-const DATA_DIR = process.env.GAMEHUB_DATA_DIR || path.join(__dirname, "data");
 const DB_FILE = path.join(DATA_DIR, "db.json");
+const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30;
 
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
 if (!fs.existsSync(DB_FILE)) {
-  fs.writeFileSync(DB_FILE, JSON.stringify({ users: [], products: [], orders: [], topups: [] }, null, 2));
+  fs.writeFileSync(DB_FILE, JSON.stringify({ users: [], products: [], orders: [], topups: [], gameCategories: [] }, null, 2));
 }
 const readDB = () => JSON.parse(fs.readFileSync(DB_FILE, "utf8"));
 const writeDB = (db) => fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
@@ -32,6 +54,32 @@ const aiRateLimits = new Map();
 const AI_RATE_WINDOW_MS = 10 * 60 * 1000;
 const AI_RATE_MAX_REQUESTS = 20;
 const getStock = product => Array.isArray(product.accounts) ? product.accounts.length : 0;
+const DEFAULT_GAME_CATEGORIES=["Liên Quân","Free Fire","Roblox"];
+const normalizeGameName=name=>String(name||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim();
+const getGameCategories=gameNames=>{
+  const uniqueNames=[...new Set(gameNames.filter(Boolean))];
+  const categories=DEFAULT_GAME_CATEGORIES.map(label=>({
+    name:uniqueNames.find(name=>normalizeGameName(name)===normalizeGameName(label))||label,
+    label
+  }));
+  uniqueNames.forEach(name=>{
+    if(!categories.some(category=>normalizeGameName(category.name)===normalizeGameName(name))){
+      categories.push({name,label:name});
+    }
+  });
+  return categories;
+};
+const savedGameCategories=db=>Array.isArray(db.gameCategories)
+  ?db.gameCategories.filter(category=>typeof category==="string"&&category.trim())
+  :[];
+const rememberGameCategory=(db,name)=>{
+  const gameName=String(name||"").trim();
+  if(!gameName) return;
+  if(!Array.isArray(db.gameCategories)) db.gameCategories=[];
+  if(!db.gameCategories.some(category=>normalizeGameName(category)===normalizeGameName(gameName))){
+    db.gameCategories.push(gameName);
+  }
+};
 const allowAiRequest = ip => {
   const now=Date.now();
   for(const [key,value] of aiRateLimits){
@@ -93,9 +141,15 @@ app.use(express.json({
 }));
 app.use(express.static(path.join(__dirname, "public")));
 app.use(session({
-  secret: sessionSecret || crypto.randomBytes(32).toString("hex"),
+  store: new FileSessionStore({
+    directory: path.join(DATA_DIR, "sessions"),
+    ttlMs: SESSION_TTL_MS,
+    secret: sessionSecret
+  }),
+  secret: sessionSecret,
   resave: false, saveUninitialized: false,
-  cookie: { httpOnly: true, sameSite: "lax", secure: isProduction, maxAge: 1000*60*60*4 }
+  rolling: true,
+  cookie: { httpOnly: true, sameSite: "lax", secure: isProduction, maxAge: SESSION_TTL_MS }
 }));
 app.use((req,res,next)=>{
   res.set("Cache-Control","no-store");
@@ -164,29 +218,47 @@ const establishAuthenticatedSession=(req,res,user,message,destination)=>{
   });
 };
 
-app.get("/",(req,res)=>{
+const renderCatalog=(req,res,routeGame="")=>{
   const db=readDB();
   const q=typeof req.query.q==="string"?req.query.q.trim().slice(0,100):"";
-  const game=typeof req.query.game==="string"?req.query.game:"";
+  const requestedGame=routeGame||(typeof req.query.game==="string"?req.query.game:"");
   const allProducts=db.products.map(p=>({...p,stock:getStock(p)}));
-  const categoryNames=[...new Set(allProducts.filter(p=>p.stock>0).map(p=>p.game).filter(Boolean))];
-  const categories=categoryNames.map(name=>({
-    name,
-    stock:allProducts.filter(p=>p.game===name).reduce((total,p)=>total+p.stock,0),
-    selected:game===name,
-    href:`/?game=${encodeURIComponent(name)}${q?`&q=${encodeURIComponent(q)}`:""}`
+  const categoryNames=[...savedGameCategories(db),...allProducts.map(product=>product.game)];
+  const knownCategories=getGameCategories(categoryNames);
+  const game=knownCategories.find(category=>normalizeGameName(category.name)===normalizeGameName(requestedGame))?.name||requestedGame;
+  if(routeGame&&!knownCategories.some(category=>normalizeGameName(category.name)===normalizeGameName(routeGame))){
+    return res.status(404).render("message",{title:"Không tìm thấy danh mục",message:"Danh mục game này hiện không có sản phẩm trong kho."});
+  }
+  const categories=getGameCategories(categoryNames).map(category=>({
+    ...category,
+    stock:allProducts.filter(product=>normalizeGameName(product.game)===normalizeGameName(category.name)).reduce((total,product)=>total+product.stock,0),
+    selected:normalizeGameName(game)===normalizeGameName(category.name),
+    image:category.label==="Roblox"
+      ?"/images/roblox-category.jpg"
+      :category.label==="Free Fire"
+        ?"/images/free-fire-category.jpg"
+        :normalizeGameName(category.name).includes("lien quan")
+          ?"/images/lien-quan-airi.jpg"
+          :"",
+    href:`/game/${encodeURIComponent(category.name)}${q?`?q=${encodeURIComponent(q)}`:""}`
   }));
+  const gameImage=categories.find(category=>category.selected)?.image||"";
   let products=allProducts.filter(p=>p.stock>0);
   if(q) products=products.filter(p=>(p.name+" "+p.game+" "+p.description).toLowerCase().includes(q.toLowerCase()));
-  if(game) products=products.filter(p=>p.game===game);
+  if(game) products=products.filter(p=>normalizeGameName(p.game)===normalizeGameName(game));
   res.render("index",{
-    products,categories,q,game,
+    products,categories,q,game,gameImage,
+    catalogTotalStock:allProducts.reduce((total,product)=>total+product.stock,0),
+    catalogTitle:game?`${game} - Tài khoản game`:"Cửa hàng tài khoản game",
+    catalogAction:game?`/game/${encodeURIComponent(game)}`:"/",
     allCategoryHref:q?`/?q=${encodeURIComponent(q)}`:"/",
     topUsers:getLeaderboard(db,3),
     paymentReady:Boolean(vnpayConfig),
     bankReady:Boolean(sepayConfig)
   });
-});
+};
+app.get("/",(req,res)=>renderCatalog(req,res));
+app.get("/game/:game",(req,res)=>renderCatalog(req,res,req.params.game));
 app.get("/san-pham/:id",(req,res)=>{
   const db=readDB(), product=db.products.find(p=>p.id===Number(req.params.id));
   if(!product||getStock(product)===0) return res.status(404).render("message",{title:"Không tìm thấy",message:"Sản phẩm hiện không có tài khoản trong kho."});
@@ -198,16 +270,27 @@ app.post("/dang-ky",async(req,res)=>{
   if(!name?.trim()||!email?.trim()||!password||password.length<8){notice(req,"Vui lòng nhập đủ thông tin. Mật khẩu tối thiểu 8 ký tự.");return res.redirect("/dang-ky");}
   if(db.users.some(u=>u.email.toLowerCase()===email.trim().toLowerCase())){notice(req,"Email đã được sử dụng.");return res.redirect("/dang-ky");}
   const user={id:Date.now(),name:name.trim(),email:email.trim().toLowerCase(),password:await bcrypt.hash(password,10),role:"user",balance:0,createdAt:new Date().toISOString()};
-  db.users.push(user);writeDB(db);req.session.user={id:user.id};notice(req,"Đăng ký thành công!");res.redirect("/tai-khoan");
+  db.users.push(user);writeDB(db);
+  establishAuthenticatedSession(req,res,user,"Đăng ký thành công! Phiên đăng nhập trên thiết bị này sẽ được ghi nhớ tối đa 30 ngày.","/tai-khoan");
 });
 app.get("/dang-nhap",(req,res)=>res.render("auth",{mode:"login"}));
 app.post("/dang-nhap",async(req,res)=>{
   const db=readDB(), email=String(req.body.email||"").trim().toLowerCase();
   const user=db.users.find(u=>String(u.email||"").trim().toLowerCase()===email);
   if(!user||!(await bcrypt.compare(req.body.password||"",user.password))){notice(req,"Email hoặc mật khẩu chưa chính xác.");return res.redirect("/dang-nhap");}
-  establishAuthenticatedSession(req,res,user,"Đăng nhập thành công.",user.role==="admin"?"/admin":"/tai-khoan");
+  establishAuthenticatedSession(req,res,user,"Đăng nhập thành công. Thiết bị này sẽ được ghi nhớ tối đa 30 ngày.",user.role==="admin"?"/admin":"/tai-khoan");
 });
-app.post("/dang-xuat",(req,res)=>req.session.destroy(()=>res.redirect("/")));
+app.post("/dang-xuat",(req,res)=>req.session.destroy(error=>{
+  if(error){
+    console.error("Could not destroy session during logout.",error);
+    return res.status(500).render("message",{
+      title:"Không thể đăng xuất",
+      message:"Không thể kết thúc phiên đăng nhập. Vui lòng thử lại."
+    });
+  }
+  res.clearCookie("connect.sid",{httpOnly:true,sameSite:"lax",secure:isProduction,path:"/"});
+  res.redirect("/");
+}));
 app.get("/tai-khoan",auth,(req,res)=>{
   res.set("Cache-Control","no-store");
   const db=readDB(), user=db.users.find(u=>u.id===req.session.user.id);
@@ -455,12 +538,16 @@ app.post("/api/ai/chat",async(req,res)=>{
 app.get("/admin",adminAuth,admin,(req,res)=>{
   const db=readDB();
   const customers=db.users.filter(user=>user.role!=="admin");
+  const categories=getGameCategories([...savedGameCategories(db),...db.products.map(product=>product.game)]).map(category=>({
+    ...category,
+    stock:db.products.filter(product=>normalizeGameName(product.game)===normalizeGameName(category.name)).reduce((total,product)=>total+getStock(product),0),
+    href:`/admin?game=${encodeURIComponent(category.name)}`
+  }));
+  const requestedGame=typeof req.query.game==="string"?req.query.game:"";
+  const selectedGame=categories.find(category=>normalizeGameName(category.name)===normalizeGameName(requestedGame))?.name||"";
   res.render("admin",{
-    products:db.products.map(p=>({...p,stock:getStock(p)})),
-    categories:[...new Set(db.products.map(p=>p.game).filter(Boolean))].map(name=>({
-      name,
-      stock:db.products.filter(p=>p.game===name).reduce((total,p)=>total+getStock(p),0)
-    })),
+    products:db.products.filter(product=>!selectedGame||normalizeGameName(product.game)===normalizeGameName(selectedGame)).map(p=>({...p,stock:getStock(p)})),
+    categories,selectedGame,
     users:customers.map(user=>({
       id:user.id,name:user.name,email:user.email,role:user.role,balance:user.balance
     })),
@@ -491,11 +578,25 @@ app.post("/admin/san-pham",adminAuth,admin,(req,res)=>{
     notice(req,"Vui lòng nhập danh mục, tên, giá và thông tin sản phẩm hợp lệ.");
     return res.redirect("/admin");
   }
+  const existingProduct=findMatchingProduct(db.products,game,name);
+  if(existingProduct){
+    if(!accounts.length){
+      notice(req,"Sản phẩm cùng tên và danh mục đã có. Hãy nhập tài khoản để bổ sung kho, hoặc chỉnh sửa sản phẩm hiện có.");
+      return res.redirect(`/admin?game=${encodeURIComponent(existingProduct.game)}`);
+    }
+    rememberGameCategory(db,game);
+    const previousStock=getStock(existingProduct);
+    const totalStock=appendAccounts(existingProduct,accounts);
+    writeDB(db);
+    notice(req,`Đã thêm ${accounts.length} tài khoản vào sản phẩm hiện có; giữ nguyên ${previousStock} tài khoản cũ (${totalStock} tài khoản trong kho). Thông tin sản phẩm cũ không thay đổi.`);
+    return res.redirect(`/admin?game=${encodeURIComponent(existingProduct.game)}`);
+  }
+  rememberGameCategory(db,game);
   db.products.push({
     id:Date.now(),game,name,description,image,price,accounts,
     status:accounts.length>0?"available":"sold",createdAt:new Date().toISOString()
   });
-  writeDB(db);notice(req,"Đã thêm sản phẩm.");res.redirect("/admin");
+  writeDB(db);notice(req,"Đã thêm sản phẩm.");res.redirect(`/admin?game=${encodeURIComponent(game)}`);
 });
 app.post("/admin/san-pham/:id/cap-nhat",adminAuth,admin,(req,res)=>{
   const db=readDB(),product=db.products.find(p=>p.id===Number(req.params.id));
@@ -515,13 +616,17 @@ app.post("/admin/san-pham/:id/cap-nhat",adminAuth,admin,(req,res)=>{
     notice(req,"Thông tin sản phẩm không hợp lệ.");
     return res.redirect("/admin");
   }
-  product.accounts=Array.isArray(product.accounts)?product.accounts:[];
-  product.accounts.push(...accounts);
-  Object.assign(product,{game,name,description,image,price,status:getStock(product)>0?"available":"sold"});
-  writeDB(db);notice(req,"Đã cập nhật sản phẩm và mã hàng đã được mã hóa.");res.redirect("/admin");
+  rememberGameCategory(db,product.game);
+  rememberGameCategory(db,game);
+  appendAccounts(product,accounts);
+  Object.assign(product,{game,name,description,image,price});
+  writeDB(db);notice(req,"Đã cập nhật sản phẩm và mã hàng đã được mã hóa.");res.redirect(`/admin?game=${encodeURIComponent(game)}`);
 });
 app.post("/admin/san-pham/:id/xoa",adminAuth,admin,(req,res)=>{
-  const db=readDB();db.products=db.products.filter(p=>p.id!==Number(req.params.id));writeDB(db);notice(req,"Đã xóa sản phẩm.");res.redirect("/admin");
+  const db=readDB(),product=db.products.find(p=>p.id===Number(req.params.id));
+  if(product) rememberGameCategory(db,product.game);
+  db.products=db.products.filter(p=>p.id!==Number(req.params.id));writeDB(db);notice(req,"Đã xóa sản phẩm.");
+  res.redirect(product?`/admin?game=${encodeURIComponent(product.game)}`:"/admin");
 });
 app.post("/admin/thanh-vien/:id/xoa",adminAuth,admin,(req,res)=>{
   const db=readDB(),userIndex=db.users.findIndex(user=>String(user.id)===req.params.id);
@@ -534,8 +639,8 @@ app.post("/admin/thanh-vien/:id/xoa",adminAuth,admin,(req,res)=>{
 });
 app.use((req,res)=>res.status(404).render("message",{title:"404",message:"Trang bạn tìm không tồn tại."}));
 seed().then(()=>{
-  app.listen(PORT,()=>console.log(`GTN GAMING STORE đang chạy tại http://localhost:${PORT}`));
+  app.listen(PORT,()=>console.log(`GTN GAMING SHOP đang chạy tại http://localhost:${PORT}`));
 }).catch(error=>{
-  console.error("GTN GAMING STORE failed to start.",error);
+  console.error("GTN GAMING SHOP failed to start.",error);
   process.exitCode=1;
 });

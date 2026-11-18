@@ -1,5 +1,71 @@
 document.querySelectorAll('form:not(#ai-form)').forEach(form=>{form.addEventListener('submit',()=>{const b=form.querySelector('button[type="submit"],button:not([type])');if(b&& !form.hasAttribute('onsubmit')){b.dataset.old=b.textContent;b.textContent='Đang xử lý...';}})});
 
+const navMenu = document.querySelector(".nav-menu");
+if (navMenu) {
+  const navMenuToggle = navMenu.querySelector("summary");
+  document.addEventListener("click", event => {
+    if (navMenu.open && !navMenu.contains(event.target)) navMenu.open = false;
+  });
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape" && navMenu.open) {
+      navMenu.open = false;
+      navMenuToggle.focus();
+    }
+  });
+}
+
+document.querySelectorAll("[data-image-preview-input]").forEach(input => {
+  const form = input.closest("form");
+  const preview = form?.querySelector("[data-image-preview]");
+  const status = form?.querySelector("[data-image-preview-status]");
+  if (!preview || !status) return;
+
+  const updatePreview = () => {
+    const imageUrl = input.value.trim();
+    preview.dataset.requestUrl = imageUrl;
+    preview.hidden = !imageUrl;
+    if (!imageUrl) {
+      status.textContent = "Dán link để xem trước ảnh.";
+      return;
+    }
+
+    status.textContent = "Đang tải ảnh xem trước...";
+    preview.src = imageUrl;
+  };
+
+  preview.addEventListener("load", () => {
+    if (preview.dataset.requestUrl === input.value.trim() && preview.dataset.requestUrl) {
+      status.textContent = "Ảnh tải được.";
+    }
+  });
+  preview.addEventListener("error", () => {
+    if (!preview.dataset.requestUrl || preview.dataset.requestUrl !== input.value.trim()) return;
+    preview.dataset.requestUrl = "";
+    preview.src = "/images/gamehub-placeholder.svg";
+    status.textContent = "Không tải được ảnh. Hãy dùng link ảnh trực tiếp, công khai và cho phép nhúng.";
+  });
+
+  input.addEventListener("input", updatePreview);
+  if (input.value.trim()) updatePreview();
+});
+
+document.querySelectorAll("[data-password-toggle]").forEach(toggle => {
+  const passwordInput = document.getElementById(toggle.getAttribute("aria-controls"));
+  if (!passwordInput) {
+    console.error("Password toggle input not found.");
+    return;
+  }
+
+  toggle.addEventListener("click", () => {
+    const showPassword = passwordInput.type === "password";
+    passwordInput.type = showPassword ? "text" : "password";
+    toggle.setAttribute("aria-pressed", String(showPassword));
+    toggle.setAttribute("aria-label", showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu");
+    toggle.querySelector('[data-password-icon="show"]').hidden = showPassword;
+    toggle.querySelector('[data-password-icon="hide"]').hidden = !showPassword;
+  });
+});
+
 const catalogSearchInput = document.querySelector("#catalog-search-input");
 const searchSuggestions = document.querySelector("#product-search-results");
 const catalogSearchWrap = document.querySelector(".catalog-search-wrap");

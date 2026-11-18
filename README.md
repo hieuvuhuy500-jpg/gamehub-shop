@@ -1,4 +1,4 @@
-# GTN GAMING STORE
+# GTN GAMING SHOP
 
 ## Chạy local
 1. Cài Node.js LTS và mở thư mục `gamehub-shop` trong VS Code.
@@ -9,15 +9,16 @@
 
 Chế độ `npm run dev` bỏ qua thư mục dữ liệu để Nodemon không khởi động lại máy chủ khi có đơn hàng hoặc sản phẩm mới.
 Lần đầu chạy, ứng dụng tạo tài khoản quản trị từ `ADMIN_EMAIL` và `ADMIN_PASSWORD`. Admin và khách đăng nhập tại `/dang-nhap`; tài khoản có quyền `admin` sẽ tự chuyển vào `/admin`, còn khách được chuyển đến trang tài khoản. Khu vực Admin không hiển thị trên giao diện khách và được bảo vệ theo quyền tài khoản. Không gửi nội dung `.env` hoặc khóa bí mật qua chat.
+Phiên đăng nhập được mã hóa và lưu trong `data/sessions`, được ghi nhớ tối đa 30 ngày và gia hạn khi sử dụng; đăng xuất sẽ kết thúc phiên. Nếu `SESSION_SECRET` chưa được đặt ở môi trường local, ứng dụng tạo khóa ổn định trong `data/.session-secret`. Giữ nguyên thư mục `data` và `SESSION_SECRET` để các phiên tiếp tục hoạt động sau khi khởi động lại; không dùng tùy chọn ghi nhớ trên thiết bị dùng chung.
 
 ## Đưa website lên Internet bằng Render
-Render chạy website trên máy chủ đám mây nên khách có thể truy cập khi máy tính cá nhân tắt. Tệp `render.yaml` cấu hình ứng dụng Node trên gói Free và tự tạo `SESSION_SECRET`; Render cấp URL `onrender.com` miễn phí, không cần mua tên miền riêng.
+Render chạy website trên máy chủ đám mây nên khách có thể truy cập khi máy tính cá nhân tắt. Tệp `render.yaml` cấu hình web service trả phí cùng ổ đĩa bền vững 1 GB tại `/var/data`, nơi lưu cơ sở dữ liệu JSON và phiên đăng nhập. Render tự tạo `SESSION_SECRET` và cấp URL `onrender.com`; gói trả phí và ổ đĩa sẽ phát sinh phí hằng tháng.
 1. Tạo kho GitHub mới và đưa các tệp trong thư mục `gamehub-shop` lên kho. Không đưa `.env`, `node_modules` hoặc dữ liệu riêng trong `data` lên GitHub.
-2. Tạo tài khoản Render, chọn **New > Blueprint**, kết nối kho GitHub và triển khai `render.yaml`. Nếu được hỏi, chọn gói Free.
-3. Khi Render hỏi biến môi trường, nhập `ADMIN_EMAIL`, `ADMIN_PASSWORD` mạnh và `DELIVERY_ENCRYPTION_KEY` gồm 64 ký tự hex. Tạo khóa mã hóa bằng lệnh `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`; lưu khóa an toàn và không đổi khóa sau khi đã nhập kho hàng.
-4. Chờ trạng thái triển khai thành công rồi mở URL `onrender.com` do Render cấp. Không cần bật máy tính cá nhân hay mua tên miền để dùng URL này.
+2. Trong Render, chọn **New > Blueprint**, kết nối kho GitHub và triển khai `render.yaml`. Kiểm tra gói trả phí và chi phí trong Dashboard trước khi xác nhận; ổ đĩa chỉ dùng được với web service trả phí.
+3. Khi Render hỏi biến môi trường, nhập `ADMIN_EMAIL`, `ADMIN_PASSWORD` mạnh và `DELIVERY_ENCRYPTION_KEY` gồm 64 ký tự hex. Tạo khóa mới bằng lệnh `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`; giữ khóa an toàn. Nếu chuyển dữ liệu kho đã mã hóa từ máy cá nhân, phải dùng đúng khóa `DELIVERY_ENCRYPTION_KEY` cũ.
+4. Chờ trạng thái triển khai thành công rồi mở URL `onrender.com` do Render cấp. Website vẫn hoạt động khi máy tính cá nhân tắt.
 
-Đây chỉ là cấu hình thử nghiệm: dịch vụ Free có thể ngủ sau 15 phút không có truy cập và cần khoảng một phút để hoạt động lại. Hệ thống tệp là tạm thời; dữ liệu JSON như tài khoản, kho hàng và đơn hàng có thể mất khi dịch vụ ngủ, khởi động lại hoặc triển khai lại. Session đăng nhập cũng mất khi ứng dụng khởi động lại. Không nhập kho hàng thật, nhận tiền hoặc dùng cho bán hàng thực tế. Dữ liệu đang có trên máy cá nhân không tự được chuyển lên hosting. Trước khi mở bán, cần chuyển dữ liệu và session sang dịch vụ lưu trữ production bền vững, kiểm thử sao lưu/khôi phục và hoàn tất cấu hình thanh toán HTTPS.
+Ổ đĩa giữ dữ liệu qua các lần khởi động và triển khai, nhưng dữ liệu trên máy cá nhân không tự được chuyển lên hosting. Không đưa `data/db.json`, `.env` hoặc khóa bí mật lên GitHub; cần chuyển dữ liệu riêng bằng phương thức bảo mật và giữ nguyên khóa mã hóa để đọc kho hàng cũ. Ổ đĩa chỉ gắn với một instance và có thể gây gián đoạn ngắn khi triển khai. Ứng dụng vẫn dùng JSON và phù hợp một instance; trước khi nhận tiền thật cần cấu hình thanh toán HTTPS, sao lưu/khôi phục và kiểm thử đầy đủ.
 
 ## Chuẩn bị VPS Ubuntu và HTTPS cho khách
 Tên miền `hvv.com` hiện mới là tên dự kiến; VPS chưa được thuê và website chưa được đưa lên Internet. Khi đã sở hữu domain và VPS Ubuntu 24.04:
@@ -26,7 +27,7 @@ Tên miền `hvv.com` hiện mới là tên dự kiến; VPS chưa được thu�
 3. Trong `.env` production, đặt `NODE_ENV=production`, `PORT=3000`, email/mật khẩu admin mạnh, `SESSION_SECRET` tối thiểu 32 ký tự và `DELIVERY_ENCRYPTION_KEY` 64 ký tự hex. Không chép `.env` hoặc `data/db.json` lên kho mã nguồn.
 4. Chạy Node bằng `systemd`, chỉ bind ứng dụng ở `127.0.0.1:3000`, rồi cấu hình Nginx làm reverse proxy cho `hvv.com` và `www.hvv.com`.
 5. Mở firewall VPS cho SSH, HTTP (80) và HTTPS (443), sau đó cấp chứng chỉ TLS bằng Certbot. Ứng dụng production tin cậy một reverse proxy để HTTPS session cookie hoạt động.
-6. Trước khi nhận tiền thật, chuyển dữ liệu JSON và session memory sang cơ sở dữ liệu/session store production, bật sao lưu và kiểm thử khôi phục. Chỉ cấu hình VNPay sau khi có tài khoản merchant và IPN/Return URL HTTPS hoạt động.
+6. Trước khi nhận tiền thật, chuyển dữ liệu JSON sang cơ sở dữ liệu production phù hợp, bật sao lưu và kiểm thử khôi phục. Chỉ cấu hình VNPay sau khi có tài khoản merchant và IPN/Return URL HTTPS hoạt động.
 
 Không chia sẻ mật khẩu SSH, khóa riêng, `.env` hoặc thông tin merchant qua chat. Chưa có VPS/domain được cấp phát nên hiện chưa tồn tại URL công khai để gửi khách.
 
@@ -51,6 +52,8 @@ Thẻ cào vẫn bị khóa. Chỉ mở sau khi có tài khoản tại nhà cung
 
 ## Kho hàng và giao tự động
 - Thêm sản phẩm trong trang quản trị và nhập từng tài khoản theo dòng `tên đăng nhập|mật khẩu`.
+- Nếu tạo sản phẩm trùng tên và danh mục (không phân biệt hoa thường, dấu tiếng Việt hoặc khoảng trắng thừa), tài khoản mới được cộng vào kho hiện có; tài khoản và thông tin sản phẩm cũ được giữ nguyên. Dùng biểu mẫu chỉnh sửa sản phẩm để thay đổi giá, ảnh hoặc mô tả.
+- Nhập cùng tên game cho các sản phẩm cùng danh mục; chọn danh mục trong Admin để lọc và quản lý riêng. Danh mục Free Fire và Roblox có sẵn; có thể nhập sản phẩm vào hai danh mục này ngay. Khách xem sản phẩm theo từng trang `/game/<tên-game>`, liên kết từ các danh mục trên cửa hàng.
 - Tạo khóa mã hóa 32 byte bằng lệnh `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` rồi đặt vào `DELIVERY_ENCRYPTION_KEY`.
 - Thông tin nhập kho được mã hóa AES-256-GCM trong dữ liệu và chỉ hiển thị cho người mua sau khi thanh toán bằng ví thành công. Không dùng chung mật khẩu, sao lưu `.env` an toàn và chỉ bán tài khoản có quyền phân phối.
 - Sản phẩm cũ không có thông tin giao hàng được coi là hết hàng; chúng không tự bán bằng số lượng mẫu cũ. Xóa hoặc sửa dữ liệu cũ sau khi đã sao lưu.
@@ -61,4 +64,4 @@ Thẻ cào vẫn bị khóa. Chỉ mở sau khi có tài khoản tại nhà cung
 - Website hỗ trợ điện thoại/máy tính và lưu tùy chọn sáng/tối trên trình duyệt.
 
 ## Trước khi mở bán công khai
-Ứng dụng này vẫn lưu dữ liệu trong `data/db.json` và dùng session store mặc định của Express. Đây chưa phải cấu hình production chịu tải hoặc nhiều tiến trình. Trước khi nhận tiền thật, cần triển khai HTTPS/domain, chuyển dữ liệu và session sang dịch vụ database/store production, cấu hình sao lưu, CSRF và rate limiting, rồi hoàn tất kiểm thử với tài khoản VNPay của bạn. Không dùng giao dịch sandbox cho khách thật.
+Ứng dụng vẫn lưu dữ liệu nghiệp vụ trong JSON và session trong các tệp mã hóa; disk bền vững giúp giữ các tệp này qua lần khởi động lại nhưng không biến JSON thành cơ sở dữ liệu production. Đây chỉ phù hợp một instance, không hỗ trợ mở rộng nhiều tiến trình. Trước khi nhận tiền thật, cần chuyển dữ liệu sang cơ sở dữ liệu production phù hợp, cấu hình sao lưu, rà soát bảo mật và hoàn tất kiểm thử với tài khoản VNPay của bạn. Không dùng giao dịch sandbox cho khách thật.

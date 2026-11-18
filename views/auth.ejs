@@ -1,1 +1,44 @@
-<%- include("partials/header",{title:mode==="login"?"Đăng nhập":"Đăng ký"}) %><main class="wrap auth-wrap"><section class="auth-card"><div class="auth-side"><span class="eyebrow">WELCOME TO GTN</span><h1>YOUR GAME.<br><em>YOUR WORLD.</em></h1><p>Không gian quản lý tài khoản game của bạn.</p></div><form class="auth-form" method="post" action="<%= mode==='login'?'/dang-nhap':'/dang-ky' %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><span class="eyebrow red">GTN ACCOUNT</span><h2><%= mode==="login"?"Đăng nhập":"Tạo tài khoản" %></h2><% if(mode==="register"){ %><label>Họ và tên<input name="name" required placeholder="Nguyễn Văn A"></label><% } %><label>Email<input name="email" type="email" required placeholder="you@example.com"></label><label>Mật khẩu<input name="password" type="password" minlength="8" required placeholder="Tối thiểu 8 ký tự"></label><button class="btn btn-red full"><%= mode==="login"?"Đăng nhập":"Đăng ký ngay" %></button><p class="muted"><%= mode==="login"?"Chưa có tài khoản?":"Đã có tài khoản?" %> <a href="<%= mode==='login'?'/dang-ky':'/dang-nhap' %>"><%= mode==="login"?"Đăng ký":"Đăng nhập" %></a></p></form></section></main><%- include("partials/footer") %>
+<%- include("partials/header",{title:mode==="login"?"Đăng nhập":"Đăng ký"}) %>
+<main class="wrap auth-wrap">
+  <section class="auth-card">
+    <div class="auth-side">
+      <span class="eyebrow">GTN GAMING SHOP</span>
+      <h1><%= mode==="login"?"ĐĂNG NHẬP":"TẠO TÀI KHOẢN" %><br><em>ĐỂ MUA SẮM.</em></h1>
+      <p><%= mode==="login"?"Đăng nhập để tìm và mua tài khoản game giá rẻ.":"Tạo tài khoản để tìm kiếm và mua tài khoản game giá rẻ." %></p>
+    </div>
+    <form class="auth-form" method="post" action="<%= mode==='login'?'/dang-nhap':'/dang-ky' %>">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <span class="eyebrow red">GTN ACCOUNT</span>
+      <h2><%= mode==="login"?"Đăng nhập":"Tạo tài khoản" %></h2>
+      <% if(mode==="register"){ %>
+        <label for="auth-name">Họ và tên
+          <input id="auth-name" name="name" required placeholder="Nguyễn Văn A">
+        </label>
+      <% } %>
+      <label for="auth-email">Email
+        <input id="auth-email" name="email" type="email" required placeholder="you@example.com">
+      </label>
+      <div class="auth-password-field">
+        <label for="auth-password">Mật khẩu</label>
+        <div class="password-input-wrap">
+          <input id="auth-password" name="password" type="password" minlength="8" required placeholder="Tối thiểu 8 ký tự">
+          <button class="password-toggle" type="button" aria-controls="auth-password" aria-pressed="false" aria-label="Hiện mật khẩu" data-password-toggle>
+            <svg class="password-toggle-icon" data-password-icon="show" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"></path>
+              <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+            <svg class="password-toggle-icon" data-password-icon="hide" viewBox="0 0 24 24" aria-hidden="true" hidden>
+              <path d="m3 3 18 18"></path>
+              <path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"></path>
+              <path d="M9.9 5.2A11 11 0 0 1 12 5c6.4 0 10 7 10 7a15 15 0 0 1-3.1 3.8"></path>
+              <path d="M6.2 6.2C3.5 8 2 12 2 12s3.6 7 10 7a10.5 10.5 0 0 0 4.1-.8"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <button class="btn btn-red full" type="submit"><%= mode==="login"?"Đăng nhập":"Đăng ký ngay" %></button>
+      <p class="muted"><%= mode==="login"?"Chưa có tài khoản?":"Đã có tài khoản?" %> <a href="<%= mode==='login'?'/dang-ky':'/dang-nhap' %>"><%= mode==="login"?"Đăng ký":"Đăng nhập" %></a></p>
+    </form>
+  </section>
+</main>
+<%- include("partials/footer") %>

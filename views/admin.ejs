@@ -16,11 +16,12 @@
 
   <section class="panel">
     <h2>Danh mục và tồn kho</h2>
-    <p class="admin-help">Tồn kho được tính từ số tài khoản đã nhập mã hóa. Sản phẩm cũ không có thông tin giao hàng sẽ không được bán.</p>
+    <p class="admin-help">Tồn kho được tính từ số tài khoản đã nhập mã hóa. Danh mục game vẫn được giữ lại sau khi xóa sản phẩm để bạn có thể thêm hàng sau.</p>
     <% if(categories.length){ %>
       <div class="admin-category-list">
+        <a class="<%= !selectedGame?'active':'' %>" href="/admin"><strong>Tất cả game</strong><span><%= stats.products %> sản phẩm · <%= stats.inventory %> tài khoản</span></a>
         <% categories.forEach(category=>{ %>
-          <div><strong><%= category.name %></strong><span><%= category.stock %> tài khoản</span></div>
+          <a class="<%= selectedGame===category.name?'active':'' %>" href="<%= category.href %>"><strong><%= category.label %></strong><span><%= category.stock %> tài khoản</span></a>
         <% }) %>
       </div>
     <% }else{ %><p class="empty">Chưa có danh mục có hàng.</p><% } %>
@@ -28,21 +29,30 @@
 
   <section class="panel">
     <h2>Thêm sản phẩm</h2>
-    <p class="admin-help">Nhập mỗi tài khoản theo dòng <code>tên đăng nhập|mật khẩu</code>. Dữ liệu được mã hóa trước khi lưu và chỉ giao cho khách sau khi mua.</p>
+    <p class="admin-help">Nhập mỗi tài khoản theo dòng <code>tên đăng nhập|mật khẩu</code>. Nếu cùng tên sản phẩm và danh mục đã có, tài khoản mới sẽ được cộng vào kho hiện tại; kho và thông tin cũ được giữ nguyên. Sản phẩm khác tên sẽ được tạo riêng. Dữ liệu được mã hóa trước khi lưu và chỉ giao cho khách sau khi mua.</p>
     <form class="admin-form" method="post" action="/admin/san-pham">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-      <label>Danh mục / game<input name="game" required maxlength="60" placeholder="Free Fire"></label>
+      <label>Danh mục / game<input name="game" value="<%= selectedGame %>" list="product-categories" required maxlength="60" placeholder="Free Fire"></label>
+      <datalist id="product-categories">
+        <% categories.forEach(category=>{ %><option value="<%= category.name %>"></option><% }) %>
+      </datalist>
       <label>Tên sản phẩm<input name="name" required maxlength="120"></label>
       <label>Giá (VNĐ)<input name="price" type="number" min="1000" max="50000000" required></label>
-      <label>Link ảnh<input name="image" maxlength="500" placeholder="https://..."></label>
+      <label class="wide admin-image-field">Link ảnh
+        <input name="image" maxlength="500" placeholder="Dán link ảnh công khai" data-image-preview-input>
+        <small class="admin-image-help">Ảnh cần mở trực tiếp được và cho phép nhúng; link trang chia sẻ hoặc trang web thường không dùng làm link ảnh được.</small>
+        <span class="admin-image-status" data-image-preview-status aria-live="polite">Dán link để xem trước ảnh.</span>
+        <img class="admin-image-preview" src="/images/gamehub-placeholder.svg" alt="Xem trước ảnh sản phẩm" data-image-preview hidden>
+      </label>
       <label class="wide">Mô tả<input name="description" maxlength="1000"></label>
       <label class="wide">Tên đăng nhập và mật khẩu tài khoản (mỗi dòng: tài khoản|mật khẩu)<textarea name="accounts" rows="5" maxlength="80000" placeholder="email@example.com|mat-khau"></textarea></label>
-      <button class="btn btn-red" type="submit">Thêm sản phẩm</button>
+      <button class="btn btn-red" type="submit">Thêm sản phẩm / cộng kho</button>
     </form>
   </section>
 
   <section class="panel">
-    <h2>Quản lý sản phẩm và kho tài khoản</h2>
+    <h2>Quản lý sản phẩm<% if(selectedGame){ %> · <%= selectedGame %><% } %></h2>
+    <p class="admin-help"><%= selectedGame?`Đang hiển thị sản phẩm thuộc danh mục ${selectedGame}.`:"Chọn một game ở trên để lọc sản phẩm cần quản lý." %></p>
     <div class="table-wrap">
       <table class="admin-products-table">
         <thead><tr><th>Mã</th><th>Thông tin sản phẩm</th><th>Thao tác</th></tr></thead>
@@ -53,10 +63,15 @@
               <td>
                 <form class="admin-product-form" method="post" action="/admin/san-pham/<%= p.id %>/cap-nhat">
                   <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                  <label>Danh mục<input name="game" value="<%= p.game %>" required maxlength="60"></label>
+                  <label>Danh mục<input name="game" value="<%= p.game %>" list="product-categories" required maxlength="60"></label>
                   <label>Tên sản phẩm<input name="name" value="<%= p.name %>" required maxlength="120"></label>
                   <label>Giá<input name="price" type="number" min="1000" max="50000000" value="<%= p.price %>" required></label>
-                  <label>Link ảnh<input name="image" value="<%= p.image %>" maxlength="500"></label>
+                  <label class="wide admin-image-field">Link ảnh
+                    <input name="image" value="<%= p.image %>" maxlength="500" data-image-preview-input>
+                    <small class="admin-image-help">Ảnh cần mở trực tiếp được và cho phép nhúng; link trang chia sẻ hoặc trang web thường không dùng làm link ảnh được.</small>
+                    <span class="admin-image-status" data-image-preview-status aria-live="polite">Dán link để xem trước ảnh.</span>
+                    <img class="admin-image-preview" src="/images/gamehub-placeholder.svg" alt="Xem trước ảnh sản phẩm" data-image-preview hidden>
+                  </label>
                   <label class="wide">Mô tả<input name="description" value="<%= p.description %>" maxlength="1000"></label>
                   <label class="wide">Thêm tài khoản/mật khẩu vào kho (mỗi dòng: tài khoản|mật khẩu)<textarea name="accounts" rows="3" maxlength="80000" placeholder="email@example.com|mat-khau"></textarea></label>
                   <button class="btn btn-small btn-red" type="submit">Lưu / thêm kho</button>
@@ -114,7 +129,7 @@
 
   <section class="panel">
     <h2>Thành viên</h2>
-    <p class="admin-help">Xóa tài khoản sẽ chặn thành viên đăng nhập; lịch sử đơn hàng và giao dịch nạp tiền vẫn được lưu.</p>
+    <p class="admin-help">Admin chỉ thấy tên, email và số dư của khách hàng. Mật khẩu được băm một chiều và không được gửi tới trang quản trị. Xóa tài khoản sẽ chặn thành viên đăng nhập; lịch sử đơn hàng và giao dịch nạp tiền vẫn được lưu.</p>
     <div class="table-wrap">
       <table>
         <thead><tr><th>Tên</th><th>Email</th><th>Số dư</th><th>Thao tác</th></tr></thead>

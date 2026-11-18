@@ -1,16 +1,33 @@
-<%- include("partials/header",{title:"Cửa hàng tài khoản game"}) %>
+<%- include("partials/header",{title:catalogTitle}) %>
 <main class="wrap catalog-page">
+  <% if(game){ %>
+  <section class="store-hero game-store-hero <%= gameImage?'has-category-image':'' %>">
+    <% if(gameImage){ %><img class="game-store-hero-image" src="<%= gameImage %>" alt="" fetchpriority="high"><% } %>
+    <div class="store-hero-copy">
+      <span class="eyebrow red">DANH MỤC GAME</span>
+      <h1><%= game %></h1>
+      <p>Tài khoản <%= game %> đang có trong kho, được sắp xếp riêng để bạn dễ tìm và lựa chọn.</p>
+      <a class="btn btn-red" href="#products">Xem sản phẩm <span aria-hidden="true">→</span></a>
+    </div>
+    <% if(!gameImage){ %><div class="store-hero-art" aria-hidden="true">
+      <div class="store-hero-wordmark"><strong>GTN</strong><span>GAMING SHOP</span></div>
+    </div><% } %>
+  </section>
+  <% }else{ %>
   <section class="store-hero">
     <div class="store-hero-copy">
-      <span class="eyebrow red">GTN GAMING STORE · DANH MỤC TÀI KHOẢN</span>
+      <span class="eyebrow red">GTN GAMING SHOP · DANH MỤC TÀI KHOẢN</span>
       <h1>Tìm tài khoản<br><em>game yêu thích</em></h1>
       <p>Khám phá các lựa chọn tài khoản game với thông tin và mức giá được hiển thị rõ ràng.</p>
-      <a class="btn btn-red" href="#products">Khám phá sản phẩm <span aria-hidden="true">→</span></a>
+      <a class="btn btn-red" href="#game-categories">Chọn danh mục game <span aria-hidden="true">→</span></a>
     </div>
-    <div class="store-hero-art" aria-hidden="true">
-      <div class="store-hero-wordmark"><strong>GTN</strong><span>GAMING STORE</span></div>
+    <div class="store-hero-art home-game-art" aria-hidden="true">
+      <img src="/images/free-fire-category.jpg" alt="" fetchpriority="high">
+      <img src="/images/roblox-category.jpg" alt="" loading="lazy">
+      <img src="/images/lien-quan-airi.jpg" alt="" loading="lazy">
     </div>
   </section>
+  <% } %>
 
   <section class="store-notice" aria-label="Thông tin cửa hàng">
     <span class="store-notice-icon" aria-hidden="true">i</span>
@@ -26,35 +43,63 @@
     <div><span aria-hidden="true">💳</span><div><b>Nạp ví</b><small><%= paymentReady&&bankReady?"VNPay và chuyển khoản ngân hàng":paymentReady?"Thanh toán qua VNPay":bankReady?"Chuyển khoản qua SePay":"Phương thức thanh toán đang chờ cấu hình" %></small></div></div>
   </section>
 
-  <section id="products" class="catalog-heading">
+  <section id="<%= game?'products':'catalog-heading' %>" class="catalog-heading">
     <div>
       <span class="eyebrow red">GIAN HÀNG GTN</span>
-      <h2>Tài khoản đang có</h2>
-      <p>Chọn danh mục để tìm sản phẩm phù hợp.</p>
+      <h2><%= game?`Tài khoản ${game}`:"Chọn danh mục game" %></h2>
+      <p><%= game?"Chỉ hiển thị tài khoản thuộc danh mục game đang chọn.":"Tài khoản chỉ hiển thị sau khi bạn chọn một danh mục game." %></p>
     </div>
+    <% if(game){ %>
     <div class="catalog-search-wrap">
-      <form class="search catalog-search" action="/" method="get" role="search">
+      <form class="search catalog-search" action="<%= catalogAction %>" method="get" role="search">
         <input id="catalog-search-input" name="q" value="<%= q %>" placeholder="Tìm game, tài khoản..." aria-label="Tìm game hoặc tài khoản" autocomplete="off" aria-autocomplete="list" aria-controls="product-search-results" aria-expanded="false">
-        <% if(game){ %><input type="hidden" name="game" value="<%= game %>"><% } %>
         <button class="btn btn-red" type="submit">Tìm kiếm</button>
       </form>
       <div class="search-suggestions" id="product-search-results" role="listbox" aria-label="Kết quả tìm kiếm" hidden></div>
     </div>
+    <% } %>
   </section>
 
   <div class="catalog-toolbar">
-    <nav class="filters" aria-label="Lọc theo game">
-      <a class="<%= !game?'active':'' %>" href="<%= allCategoryHref %>">Tất cả</a>
+    <% if(game){ %>
+    <a class="btn btn-outline" href="<%= allCategoryHref %>#game-categories">← Tất cả danh mục game</a>
+    <% }else{ %>
+    <div class="game-category-heading">
+      <strong>Danh mục game</strong>
+      <small>Chọn một game để xem các tài khoản đang có.</small>
+    </div>
+    <nav class="game-category-grid" id="game-categories" aria-label="Danh mục game">
+      <a class="game-category-card game-category-all <%= !game?'active':'' %>" href="<%= allCategoryHref %>" <%= !game?'aria-current="page"':'' %>>
+        <div class="game-category-all-art" aria-hidden="true">
+          <img src="/images/free-fire-category.jpg" alt="">
+          <img src="/images/roblox-category.jpg" alt="">
+          <img src="/images/lien-quan-airi.jpg" alt="">
+        </div>
+        <div class="game-category-copy">
+          <span class="game-category-label">Cửa hàng</span>
+          <strong>Tất cả game</strong>
+          <small><%= catalogTotalStock %> tài khoản</small>
+        </div>
+      </a>
       <% categories.forEach(category=>{ %>
-        <a class="<%= category.selected?'active':'' %>" href="<%= category.href %>"><%= category.name %><span><%= category.stock %></span></a>
+        <a class="game-category-card <%= category.selected?'active':'' %>" href="<%= category.href %>" <%= category.selected?'aria-current="page"':'' %>>
+          <% if(category.image){ %><img class="game-category-image" src="<%= category.image %>" alt="" loading="lazy" decoding="async"><% } %>
+          <div class="game-category-copy">
+            <span class="game-category-label">Game</span>
+            <strong><%= category.label %></strong>
+            <small><%= category.stock %> tài khoản</small>
+          </div>
+        </a>
       <% }) %>
     </nav>
-    <span class="catalog-count"><strong><%= products.reduce((total,p)=>total+p.stock,0) %></strong> tài khoản</span>
+    <% } %>
+    <% if(game){ %><span class="catalog-count"><strong><%= products.reduce((total,p)=>total+p.stock,0) %></strong> tài khoản đang hiển thị</span><% } %>
   </div>
 
+  <% if(game){ %>
   <div class="products">
     <% if(!products.length){ %>
-      <div class="empty"><%= q||game?"Không tìm thấy sản phẩm phù hợp.":"Hiện chưa có tài khoản nào trong kho. Vui lòng quay lại sau." %></div>
+      <div class="empty"><%= q?"Không tìm thấy sản phẩm phù hợp.":game?`Danh mục ${game} chưa có tài khoản trong kho. Vui lòng quay lại sau.`:"Hiện chưa có tài khoản nào trong kho. Vui lòng quay lại sau." %></div>
     <% } %>
     <% products.forEach(p=>{ %>
       <article class="product-card" id="product-<%= p.id %>" data-product-search="<%= `${p.name} ${p.game} ${p.description}` %>">
@@ -74,6 +119,12 @@
       </article>
     <% }) %>
   </div>
+  <% }else{ %>
+  <div id="products" class="store-notice catalog-category-prompt">
+    <span class="store-notice-icon" aria-hidden="true">i</span>
+    <div><strong>Chọn danh mục game để xem tài khoản</strong><p>Danh sách tài khoản sẽ được lọc theo game bạn chọn.</p></div>
+  </div>
+  <% } %>
 
   <section class="leaderboard-preview panel">
     <div class="leaderboard-heading">
