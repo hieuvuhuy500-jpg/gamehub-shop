@@ -435,12 +435,12 @@ app.get("/api/vnpay/ipn",(req,res)=>{
 app.post("/api/sepay/webhook",(req,res)=>{
   if(!sepayConfig) return res.status(503).json({success:false,message:"SePay is not configured."});
   if (!verifySepaySignature({
-    authorization: req.get("authorization"),
-    signature: req.get("x-sepay-signature"),
-    timestamp: req.get("x-sepay-timestamp"),
-    rawBody: req.rawBody,
-    secret: sepayConfig.webhookSecret
-  })) {
+  authorization: req.get("authorization"),
+  signature: req.get("x-sepay-signature"),
+  timestamp: req.get("x-sepay-timestamp"),
+  rawBody: req.rawBody,
+  secret: sepayConfig.webhookSecret
+})) {
     return res.status(401).json({success:false,message:"Unauthorized."});
   }
   const transaction=parseSepayTransaction(req.body);
