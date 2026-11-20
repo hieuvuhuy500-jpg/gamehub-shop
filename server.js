@@ -736,6 +736,8 @@ app.post("/api/ai/chat", async (req, res) => {
 app.get("/admin", adminAuth, admin, (req, res) => {
   const db = readDB();
   const customers = db.users.filter(user => user.role !== "admin");
+  const userMap = new Map(db.users.map(user => [user.id, user]));
+
   const categories = getGameCategories([...savedGameCategories(db), ...db.products.map(product => product.game)]).map(category => ({
     ...category,
     stock: db.products
@@ -745,6 +747,18 @@ app.get("/admin", adminAuth, admin, (req, res) => {
   }));
   const requestedGame = typeof req.query.game === "string" ? req.query.game : "";
   const selectedGame = categories.find(category => normalizeGameName(category.name) === normalizeGameName(requestedGame))?.name || "";
+
+  const topups = db.topups.slice().reverse().map(t => {
+    const owner = userMap.get(t.userId);
+    return {
+      ...t,
+      userName: owner ? owner.name : "Tài khoản đã xóa",
+      userEmail: owner ? owner.email : `ID #${t.userId}`,
+      userBalance: owner ? Number(owner.balance) || 0 : 0
+    };
+  });
+  const pendingTopups = topups.filter(t => t.status === "pending");
+  const pendingTopupsAmount = pendingTopups.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
 
   res.render("admin", {
     products: db.products
@@ -760,13 +774,16 @@ app.get("/admin", adminAuth, admin, (req, res) => {
       balance: user.balance
     })),
     orders: db.orders.filter(order => order.delivery).slice().reverse(),
-    topups: db.topups.slice().reverse(),
+    topups,
+    pendingTopups,
     stats: {
       products: db.products.length,
       inventory: db.products.reduce((total, p) => total + getStock(p), 0),
       users: customers.length,
       orders: db.orders.filter(order => order.delivery).length,
-      revenue: db.orders.filter(order => order.delivery).reduce((sum, order) => sum + order.price, 0)
+      revenue: db.orders.filter(order => order.delivery).reduce((sum, order) => sum + order.price, 0),
+      pendingTopupsCount: pendingTopups.length,
+      pendingTopupsAmount
     }
   });
 });
@@ -806,7 +823,73 @@ app.post("/admin/san-pham", adminAuth, admin, (req, res) => {
     notice(req, `Đã thêm ${accounts.length} tài khoản vào sản phẩm hiện có; giữ nguyên ${previousStock} tài khoản cũ (${totalStock} tài khoản trong kho). Thông tin sản phẩm cũ không thay đổi.`);
     return res.redirect(`/admin?game=${encodeURIComponent(existingProduct.game)}`);
   }
+app.post("/admin/nap-tien/:id/duyet", adminAuth, admin, (req, res) => {
+  const db = readDB();
+  const topup = db.topups.find(t => String(t.id) === req.params.id);
+  if (!topup) {
+    notice(req, "Không tìm thấy yêu cầu nạp tiền này.");
+    return res.redirect("/admin");
+  }
+  if (topup.status !== "pending") {
+    notice(req, "Yêu cầu nạp tiền này đã được xử lý trước đó.");
+    return res.redirect("/admin");
+  }
 
+  const amount = Number(topup.amount);
+  if (!Number.isSafeInteger(amount) || amount <= 0) {
+    notice(req, "Số tiền nạp không hợp lệ.");
+    return res.redirect("/admin");
+  }
+
+  const user = db.users.find(u => u.id === topup.userId);
+  if (!user) {
+    notice(req, "Không tìm thấy tài khoản khách hàng tương ứng.");
+    return res.redirect("/admin");
+  }
+
+  const currentBalance = Number(user.balance) || 0;
+  const nextBalance = currentBalance + amount;
+  if (!Number.isSafeInteger(currentBalance) || currentBalance < 0 || !Number.isSafeInteger(nextBalance)) {
+    notice(req, "Số dư khách hàng không hợp lệ, không thể cộng tiền.");
+    return res.redirect("/admin");
+  }
+
+  topup.status = "paid";
+  topup.paidAt = new Date().toISOString();
+  topup.transactionNo = topup.transactionNo || "ADMIN-CONFIRMED";
+  topup.approvedBy = req.session.user.id;
+  user.balance = nextBalance;
+
+  writeDB(db);
+  console.log(`[Admin] Confirmed topup ${topup.id} (+${amount} VND) for ${user.email}. New balance: ${nextBalance}.`);
+  notice(
+    req,
+    `Đã xác nhận và cộng ${amount.toLocaleString("vi-VN")}₫ vào ví ${user.email}. Số dư mới: ${nextBalance.toLocaleString("vi-VN")}₫.`
+  );
+  res.redirect("/admin");
+});
+
+app.post("/admin/nap-tien/:id/tu-choi", adminAuth, admin, (req, res) => {
+  const db = readDB();
+  const topup = db.topups.find(t => String(t.id) === req.params.id);
+  if (!topup) {
+    notice(req, "Không tìm thấy yêu cầu nạp tiền này.");
+    return res.redirect("/admin");
+  }
+  if (topup.status !== "pending") {
+    notice(req, "Yêu cầu nạp tiền này đã được xử lý trước đó.");
+    return res.redirect("/admin");
+  }
+
+  topup.status = "failed";
+  topup.rejectedAt = new Date().toISOString();
+  topup.rejectedBy = req.session.user.id;
+
+  writeDB(db);
+  console.log(`[Admin] Rejected topup ${topup.id} (${topup.amount} VND).`);
+  notice(req, `Đã từ chối yêu cầu nạp ${topup.bankReference || topup.id}.`);
+  res.redirect("/admin");
+});
   rememberGameCategory(db, game);
   db.products.push({
     id: Date.now(),
