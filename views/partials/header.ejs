@@ -62,7 +62,15 @@
         <% }else if(user){ %>
         <div class="nav-right">
           <a class="btn btn-red" href="/nap-tien">Nạp tiền</a>
-          <a class="nav-user" href="/tai-khoan">Tài khoản</a>
+          <a class="nav-user" href="/tai-khoan" style="display:inline-flex;align-items:center;gap:8px;">
+            <% const navInitial = (user.name ? user.name.trim()[0] : "U").toUpperCase(); %>
+            <% if (user.avatar) { %>
+              <img src="<%= user.avatar %>" alt="<%= user.name %>" style="width:28px;height:28px;border-radius:50%;object-fit:cover;border:2px solid #ef4444;flex-shrink:0;">
+            <% } else { %>
+              <span style="width:28px;height:28px;border-radius:50%;background:#ef4444;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;"><%= navInitial %></span>
+            <% } %>
+            <span><%= user.name %></span>
+          </a>
           <form action="/dang-xuat" method="post"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-outline" type="submit">Thoát</button></form>
         </div>
         <% } %>
