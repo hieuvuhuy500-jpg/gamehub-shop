@@ -13,7 +13,52 @@
     <div class="stat"><small>Đơn hàng</small><strong><%= stats.orders %></strong></div>
     <div class="stat"><small>Doanh thu</small><strong><%= money(stats.revenue) %></strong></div>
   </div>
+<section class="panel" style="border:2px solid #f59e0b;">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
+      <h2 style="margin:0;">Yêu cầu nạp tiền chờ xác nhận (<%= stats.pendingTopupsCount || 0 %>)</h2>
+      <strong>Tổng cần xác nhận: <%= money(stats.pendingTopupsAmount || 0) %></strong>
+    </div>
 
+    <% if (!pendingTopups || pendingTopups.length === 0) { %>
+      <p class="empty">Hiện không có yêu cầu nạp tiền nào đang chờ xác nhận.</p>
+    <% } else { %>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Khách hàng</th>
+              <th>Nội dung CK</th>
+              <th>Số tiền cần cộng</th>
+              <th>Ví hiện tại</th>
+              <th>Thời gian</th>
+              <th>Xác nhận</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% pendingTopups.forEach(t => { %>
+              <tr>
+                <td><strong><%= t.userName %></strong><br><small><%= t.userEmail %></small></td>
+                <td><code><%= t.bankReference || t.id %></code><br><small><%= t.method %></small></td>
+                <td style="font-weight:700;color:#dc2626;">+<%= money(t.amount) %></td>
+                <td><%= money(t.userBalance) %></td>
+                <td><%= new Date(t.createdAt).toLocaleString("vi-VN") %></td>
+                <td style="white-space:nowrap;">
+                  <form method="POST" action="/admin/nap-tien/<%= t.id %>/duyet" onsubmit="return confirm('Xác nhận đã nhận <%= money(t.amount) %> và cộng vào ví <%= t.userEmail %>?');" style="display:inline-block;margin-right:6px;">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                    <button type="submit" style="padding:6px 12px;background:#16a34a;color:#fff;border:none;border-radius:6px;cursor:pointer;">Xác nhận &amp; Cộng ví</button>
+                  </form>
+                  <form method="POST" action="/admin/nap-tien/<%= t.id %>/tu-choi" onsubmit="return confirm('Từ chối yêu cầu nạp này?');" style="display:inline-block;">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                    <button type="submit" style="padding:6px 10px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">Từ chối</button>
+                  </form>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    <% } %>
+  </section>
   <section class="panel">
     <h2>Danh mục và tồn kho</h2>
     <p class="admin-help">Tồn kho được tính từ số tài khoản đã nhập mã hóa. Danh mục game vẫn được giữ lại sau khi xóa sản phẩm để bạn có thể thêm hàng sau.</p>
@@ -138,7 +183,7 @@
             <tr>
               <td><%= u.name %></td><td><%= u.email %></td><td><%= money(u.balance) %></td>
               <td>
-                <form method="POST" action="/admin/thanh-vien/<%= user.id %>/so-du" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:6px;">
+                <form method="POST" action="/admin/thanh-vien/<%= u.id %>/so-du" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:6px;">
   <input type="hidden" name="_csrf" value="<%= csrfToken %>">
   <select name="action" style="padding:4px 6px;">
     <option value="add">Cộng (+)</option>
