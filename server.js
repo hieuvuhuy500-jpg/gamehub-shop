@@ -17,6 +17,7 @@ const {
   verifySepaySignature
 } = require("./lib/sepay");
 const { createVnpayPaymentUrl, loadVnpayConfig, verifyVnpaySignature } = require("./lib/vnpay");
+const { createStorage } = require("./lib/storage");
 
 const app = express();
 const isProduction = process.env.NODE_ENV === "production";
@@ -50,31 +51,9 @@ if (isProduction && (!configuredSessionSecret || configuredSessionSecret.length 
 
 const vnpayConfig = loadVnpayConfig();
 const sepayConfig = loadSepayConfig();
-const DB_FILE = path.join(DATA_DIR, "db.json");
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30;
-
-if (!fs.existsSync(DB_FILE)) {
-  fs.writeFileSync(
-    DB_FILE,
-    JSON.stringify({ users: [], products: [], orders: [], topups: [], gameCategories: [] }, null, 2),
-    "utf8"
-  );
-}
-
-const readDB = () => JSON.parse(fs.readFileSync(DB_FILE, "utf8"));
-const writeDB = (db) => {
-  const serialized = JSON.stringify(db, null, 2);
-  const tempFile = `${DB_FILE}.${process.pid}.tmp`;
-  try {
-    fs.writeFileSync(tempFile, serialized, "utf8");
-    fs.renameSync(tempFile, DB_FILE);
-  } catch {
-    if (fs.existsSync(tempFile)) {
-      try { fs.unlinkSync(tempFile); } catch {}
-    }
-    fs.writeFileSync(DB_FILE, serialized, "utf8");
-  }
-};
+const storage = createStorage(DATA_DIR);
+const { readDB, writeDB } = storage;
 
 const aiRateLimits = new Map();
 const AI_RATE_WINDOW_MS = 10 * 60 * 1000;
@@ -172,7 +151,7 @@ app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
 if (isProduction) app.set("trust proxy", 1);
 
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true, limit: "500kb" }));
 app.use(express.json({
   limit: "100kb",
   verify: (req, res, buffer) => {
@@ -212,7 +191,9 @@ app.use((req, res, next) => {
     name: sessionUser.name,
     email: sessionUser.email,
     role: sessionUser.role,
-    balance: sessionUser.balance
+    balance: sessionUser.balance,
+    avatar: sessionUser.avatar || "",
+    createdAt: sessionUser.createdAt
   } : null;
   res.locals.csrfToken = req.session.csrfToken;
   res.locals.money = n => Number(n || 0).toLocaleString("vi-VN") + "₫";
@@ -281,7 +262,8 @@ app.get("/health", (req, res) => {
   res.status(200).json({
     status: "ok",
     sepayReady: Boolean(sepayConfig),
-    vnpayReady: Boolean(vnpayConfig)
+    vnpayReady: Boolean(vnpayConfig),
+    cloudBackup: storage.cloudEnabled
   });
 });
 
@@ -372,6 +354,7 @@ app.post("/dang-ky", async (req, res) => {
     password: await bcrypt.hash(password, 10),
     role: "user",
     balance: 0,
+    avatar: "",
     createdAt: new Date().toISOString()
   };
   db.users.push(user);
@@ -419,6 +402,7 @@ app.get("/tai-khoan", auth, (req, res) => {
   res.set("Cache-Control", "no-store");
   const db = readDB();
   const user = db.users.find(u => u.id === req.session.user.id);
+  if (!user) return res.redirect("/dang-nhap");
   const orders = db.orders
     .filter(o => o.userId === user.id && o.delivery)
     .reverse()
@@ -426,15 +410,63 @@ app.get("/tai-khoan", auth, (req, res) => {
       ...order,
       delivery: order.delivery ? decryptAccount(order.delivery) : null
     }));
- res.render("account", {
-  orders,
-  topups: db.topups
-    .filter(t => t.userId === user.id)
-    .reverse()
-    .map(t => ({
-      ...t,
-      method: t.status === "paid" ? "Đã xác nhận" : t.method
-    }))
+  res.render("account", {
+    orders,
+    topups: db.topups
+      .filter(t => t.userId === user.id)
+      .reverse()
+      .map(t => ({
+        ...t,
+        method: t.status === "paid" ? "Đã xác nhận" : t.method
+      }))
+  });
+});
+
+const isValidAvatar = value => {
+  if (!value) return true;
+  if (/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(value) && value.length <= 250000) {
+    return true;
+  }
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "https:" && value.length <= 500;
+  } catch {
+    return false;
+  }
+};
+
+app.post("/tai-khoan/ho-so", auth, (req, res) => {
+  const db = readDB();
+  const user = db.users.find(u => u.id === req.session.user.id);
+  if (!user) {
+    notice(req, "Không tìm thấy tài khoản.");
+    return res.redirect("/dang-nhap");
+  }
+
+  const name = String(req.body.name || "").trim();
+  if (name.length < 2 || name.length > 60) {
+    notice(req, "Tên hiển thị phải từ 2 đến 60 ký tự.");
+    return res.redirect("/tai-khoan");
+  }
+
+  const removeAvatar = req.body.removeAvatar === "1";
+  const avatarData = String(req.body.avatarData || "").trim();
+  const avatarUrl = String(req.body.avatarUrl || "").trim();
+  const nextAvatar = removeAvatar ? "" : (avatarData || avatarUrl);
+
+  if (nextAvatar && !isValidAvatar(nextAvatar)) {
+    notice(req, "Ảnh đại diện không hợp lệ. Vui lòng chọn ảnh PNG/JPG/WEBP hoặc đường dẫn HTTPS.");
+    return res.redirect("/tai-khoan");
+  }
+
+  user.name = name;
+  if (removeAvatar || avatarData || avatarUrl) {
+    user.avatar = nextAvatar;
+  }
+
+  writeDB(db);
+  notice(req, "Đã cập nhật thông tin trang cá nhân thành công.");
+  res.redirect("/tai-khoan");
 });
 
 app.post("/mua/:id", auth, (req, res) => {
@@ -762,16 +794,16 @@ app.get("/admin", adminAuth, admin, (req, res) => {
   const requestedGame = typeof req.query.game === "string" ? req.query.game : "";
   const selectedGame = categories.find(category => normalizeGameName(category.name) === normalizeGameName(requestedGame))?.name || "";
 
-const topups = db.topups.slice().reverse().map(t => {
-  const owner = userMap.get(t.userId);
-  return {
-    ...t,
-    method: t.status === "paid" ? "Đã xác nhận" : t.method,
-    userName: owner ? owner.name : "Tài khoản đã xóa",
-    userEmail: owner ? owner.email : `ID #${t.userId}`,
-    userBalance: owner ? Number(owner.balance) || 0 : 0
-  };
-});
+  const topups = db.topups.slice().reverse().map(t => {
+    const owner = userMap.get(t.userId);
+    return {
+      ...t,
+      method: t.status === "paid" ? "Đã xác nhận" : t.method,
+      userName: owner ? owner.name : "Tài khoản đã xóa",
+      userEmail: owner ? owner.email : `ID #${t.userId}`,
+      userBalance: owner ? Number(owner.balance) || 0 : 0
+    };
+  });
   const pendingTopups = topups.filter(t => t.status === "pending");
   const pendingTopupsAmount = pendingTopups.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
 
@@ -1041,6 +1073,14 @@ app.post("/admin/thanh-vien/:id/xoa", adminAuth, admin, (req, res) => {
   res.redirect("/admin");
 });
 
+app.get("/admin/sao-luu/tai-ve", adminAuth, admin, (req, res) => {
+  const db = readDB();
+  const stamp = new Date().toISOString().slice(0, 10);
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="gamehub-backup-${stamp}.json"`);
+  res.send(JSON.stringify(db, null, 2));
+});
+
 app.use((req, res) => res.status(404).render("message", {
   title: "404",
   message: "Trang bạn tìm không tồn tại."
@@ -1061,10 +1101,37 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = Number(process.env.PORT) || 3000;
-seed()
+let serverInstance = null;
+let shuttingDown = false;
+
+const gracefulShutdown = async (reason, exitCode = 0) => {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  await storage.flushBeforeExit(reason);
+  if (serverInstance) {
+    serverInstance.close(() => process.exit(exitCode));
+    setTimeout(() => process.exit(exitCode), 5000).unref();
+  } else {
+    process.exit(exitCode);
+  }
+};
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM", 0));
+process.on("SIGINT", () => gracefulShutdown("SIGINT", 0));
+process.on("uncaughtException", async error => {
+  console.error("Uncaught exception:", error);
+  await gracefulShutdown("uncaughtException", 1);
+});
+process.on("unhandledRejection", async reason => {
+  console.error("Unhandled rejection:", reason);
+  await storage.flushBeforeExit("unhandledRejection");
+});
+
+storage.initStorage()
+  .then(() => seed())
   .then(() => {
-    app.listen(PORT, "0.0.0.0", () => {
-      console.log(`GTN GAMING SHOP dang chay tai port ${PORT}`);
+    serverInstance = app.listen(PORT, "0.0.0.0", () => {
+      console.log(`GTN GAMING SHOP dang chay tai port ${PORT} (cloudBackup=${storage.cloudEnabled})`);
     });
   })
   .catch(error => {
