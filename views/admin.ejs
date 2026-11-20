@@ -138,10 +138,16 @@
             <tr>
               <td><%= u.name %></td><td><%= u.email %></td><td><%= money(u.balance) %></td>
               <td>
-                <form method="post" action="/admin/thanh-vien/<%= u.id %>/xoa" onsubmit="return confirm('Xóa tài khoản thành viên này? Lịch sử giao dịch sẽ được giữ lại.')">
-                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                  <button class="btn btn-small btn-red" type="submit">Xóa thành viên</button>
-                </form>
+                <form method="POST" action="/admin/thanh-vien/<%= user.id %>/so-du" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:6px;">
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+  <select name="action" style="padding:4px 6px;">
+    <option value="add">Cộng (+)</option>
+    <option value="subtract">Trừ (-)</option>
+  </select>
+  <input type="number" name="amount" min="1000" max="100000000" step="1000" placeholder="Số tiền (VNĐ)" required style="width:120px;padding:4px 6px;">
+  <input type="text" name="note" maxlength="200" placeholder="Ghi chú" style="width:130px;padding:4px 6px;">
+  <button type="submit" style="padding:4px 10px;cursor:pointer;">Cập nhật</button>
+</form>
               </td>
             </tr>
           <% }) %>

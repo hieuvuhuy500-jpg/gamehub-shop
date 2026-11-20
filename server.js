@@ -870,20 +870,57 @@ app.post("/admin/san-pham/:id/xoa", adminAuth, admin, (req, res) => {
   res.redirect(product ? `/admin?game=${encodeURIComponent(product.game)}` : "/admin");
 });
 
-app.post("/admin/thanh-vien/:id/xoa", adminAuth, admin, (req, res) => {
+app.post("/admin/thanh-vien/:id/so-du", adminAuth, admin, (req, res) => {
   const db = readDB();
-  const userIndex = db.users.findIndex(user => String(user.id) === req.params.id);
-  if (userIndex < 0) {
+  const user = db.users.find(u => String(u.id) === req.params.id);
+  if (!user) {
     notice(req, "Không tìm thấy thành viên.");
     return res.redirect("/admin");
   }
-  if (db.users[userIndex].role === "admin") {
-    notice(req, "Không thể xóa tài khoản quản trị.");
+  if (user.role === "admin") {
+    notice(req, "Không thể chỉnh sửa số dư tài khoản quản trị.");
     return res.redirect("/admin");
   }
-  db.users.splice(userIndex, 1);
+
+  const action = req.body.action === "subtract" ? "subtract" : "add";
+  const amount = Number(req.body.amount);
+  const note = String(req.body.note || "").trim().slice(0, 200);
+
+  if (!Number.isSafeInteger(amount) || amount < 1000 || amount > 100000000) {
+    notice(req, "Số tiền phải là số nguyên từ 1.000₫ đến 100.000.000₫.");
+    return res.redirect("/admin");
+  }
+
+  const currentBalance = Number(user.balance) || 0;
+  const delta = action === "subtract" ? -amount : amount;
+  const nextBalance = currentBalance + delta;
+
+  if (!Number.isSafeInteger(nextBalance) || nextBalance < 0) {
+    notice(
+      req,
+      `Số dư hiện tại (${currentBalance.toLocaleString("vi-VN")}₫) không đủ để trừ ${amount.toLocaleString("vi-VN")}₫.`
+    );
+    return res.redirect("/admin");
+  }
+
+  user.balance = nextBalance;
+  db.topups.push({
+    id: `ADM${crypto.randomBytes(6).toString("hex").toUpperCase()}`,
+    userId: user.id,
+    amount: delta,
+    method: action === "subtract" ? "Admin (Trừ thủ công)" : "Admin (Cộng thủ công)",
+    status: action === "subtract" ? "adjusted" : "paid",
+    note: note || (action === "subtract" ? "Admin trừ số dư thủ công" : "Admin cộng số dư thủ công"),
+    paidAt: new Date().toISOString(),
+    createdAt: new Date().toISOString()
+  });
+
   writeDB(db);
-  notice(req, "Đã xóa tài khoản thành viên. Lịch sử đơn hàng và giao dịch nạp tiền được giữ lại.");
+  console.log(`[Admin] ${action === "subtract" ? "Subtracted" : "Added"} ${amount} VND for ${user.email}. New balance: ${nextBalance}.`);
+  notice(
+    req,
+    `Đã ${action === "subtract" ? "trừ" : "cộng"} ${amount.toLocaleString("vi-VN")}₫ cho ${user.email}. Số dư mới: ${nextBalance.toLocaleString("vi-VN")}₫.`
+  );
   res.redirect("/admin");
 });
 
