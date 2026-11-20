@@ -174,7 +174,7 @@ if (isProduction) app.set("trust proxy", 1);
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json({
-  limit: "10kb",
+  limit: "100kb",
   verify: (req, res, buffer) => {
     if (req.path === "/api/sepay/webhook") req.rawBody = Buffer.from(buffer);
   }
@@ -426,10 +426,15 @@ app.get("/tai-khoan", auth, (req, res) => {
       ...order,
       delivery: order.delivery ? decryptAccount(order.delivery) : null
     }));
-  res.render("account", {
-    orders,
-    topups: db.topups.filter(t => t.userId === user.id).reverse()
-  });
+ res.render("account", {
+  orders,
+  topups: db.topups
+    .filter(t => t.userId === user.id)
+    .reverse()
+    .map(t => ({
+      ...t,
+      method: t.status === "paid" ? "Đã xác nhận" : t.method
+    }))
 });
 
 app.post("/mua/:id", auth, (req, res) => {
@@ -623,19 +628,20 @@ app.post("/api/sepay/webhook", (req, res) => {
   if (!sepayConfig) {
     return res.status(503).json({ success: false, message: "SePay is not configured." });
   }
+  const authHeader = req.get("authorization");
   if (!verifySepaySignature({
-    authorization: req.get("authorization"),
+    authorization: authHeader,
     signature: req.get("x-sepay-signature"),
     timestamp: req.get("x-sepay-timestamp"),
     rawBody: req.rawBody,
     secret: sepayConfig.webhookSecret
   })) {
-    console.warn("[SePay] Unauthorized webhook request rejected.");
+    console.warn(`[SePay] Unauthorized webhook rejected (hasAuthHeader=${Boolean(authHeader)}).`);
     return res.status(401).json({ success: false, message: "Unauthorized." });
   }
   const transaction = parseSepayTransaction(req.body);
   if (!transaction) {
-    console.warn("[SePay] Invalid transaction payload received.");
+    console.warn("[SePay] Invalid transaction payload received. Keys:", Object.keys(req.body || {}));
     return res.status(400).json({ success: false, message: "Invalid transaction payload." });
   }
   const db = readDB();
@@ -645,7 +651,15 @@ app.post("/api/sepay/webhook", (req, res) => {
     console.log(`[SePay] Credited transaction #${transaction.id} (+${transaction.transferAmount} VND).`);
   }
   if (!result.success) {
-    console.warn(`[SePay] Event #${transaction.id} was not credited: ${result.reason}.`);
+    const pendingRefs = db.topups
+      .filter(t => t.method === "SePay" && t.status === "pending")
+      .map(t => `${t.bankReference} (${t.amount})`);
+    console.warn(
+      `[SePay] Event #${transaction.id} not credited: ${result.reason}. ` +
+      `Received: acc=${transaction.accountNumber}, type=${transaction.transferType}, ` +
+      `amount=${transaction.transferAmount}, content="${transaction.content}". ` +
+      `Pending topups: [${pendingRefs.join(", ")}]`
+    );
   }
   return res.status(200).json({
     success: result.success,
@@ -748,15 +762,16 @@ app.get("/admin", adminAuth, admin, (req, res) => {
   const requestedGame = typeof req.query.game === "string" ? req.query.game : "";
   const selectedGame = categories.find(category => normalizeGameName(category.name) === normalizeGameName(requestedGame))?.name || "";
 
-  const topups = db.topups.slice().reverse().map(t => {
-    const owner = userMap.get(t.userId);
-    return {
-      ...t,
-      userName: owner ? owner.name : "Tài khoản đã xóa",
-      userEmail: owner ? owner.email : `ID #${t.userId}`,
-      userBalance: owner ? Number(owner.balance) || 0 : 0
-    };
-  });
+const topups = db.topups.slice().reverse().map(t => {
+  const owner = userMap.get(t.userId);
+  return {
+    ...t,
+    method: t.status === "paid" ? "Đã xác nhận" : t.method,
+    userName: owner ? owner.name : "Tài khoản đã xóa",
+    userEmail: owner ? owner.email : `ID #${t.userId}`,
+    userBalance: owner ? Number(owner.balance) || 0 : 0
+  };
+});
   const pendingTopups = topups.filter(t => t.status === "pending");
   const pendingTopupsAmount = pendingTopups.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
 
@@ -823,6 +838,70 @@ app.post("/admin/san-pham", adminAuth, admin, (req, res) => {
     notice(req, `Đã thêm ${accounts.length} tài khoản vào sản phẩm hiện có; giữ nguyên ${previousStock} tài khoản cũ (${totalStock} tài khoản trong kho). Thông tin sản phẩm cũ không thay đổi.`);
     return res.redirect(`/admin?game=${encodeURIComponent(existingProduct.game)}`);
   }
+
+  rememberGameCategory(db, game);
+  db.products.push({
+    id: Date.now(),
+    game,
+    name,
+    description,
+    image,
+    price,
+    accounts,
+    status: accounts.length > 0 ? "available" : "sold",
+    createdAt: new Date().toISOString()
+  });
+  writeDB(db);
+  notice(req, "Đã thêm sản phẩm.");
+  res.redirect(`/admin?game=${encodeURIComponent(game)}`);
+});
+
+app.post("/admin/san-pham/:id/cap-nhat", adminAuth, admin, (req, res) => {
+  const db = readDB();
+  const product = db.products.find(p => p.id === Number(req.params.id));
+  if (!product) {
+    notice(req, "Không tìm thấy sản phẩm.");
+    return res.redirect("/admin");
+  }
+  const game = String(req.body.game || "").trim();
+  const name = String(req.body.name || "").trim();
+  const description = String(req.body.description || "").trim();
+  const image = String(req.body.image || "").trim();
+  const price = Number(req.body.price);
+
+  let accounts;
+  try {
+    accounts = parseAccountEntries(req.body.accounts).map(account => encryptAccount(account));
+  } catch (error) {
+    notice(req, error.message);
+    return res.redirect("/admin");
+  }
+
+  if (!game || game.length > 60 || !name || name.length > 120 || description.length > 1000 || image.length > 500 ||
+    !Number.isInteger(price) || price < 1000 || price > 50000000) {
+    notice(req, "Thông tin sản phẩm không hợp lệ.");
+    return res.redirect("/admin");
+  }
+
+  rememberGameCategory(db, product.game);
+  rememberGameCategory(db, game);
+  appendAccounts(product, accounts);
+  Object.assign(product, { game, name, description, image, price });
+  writeDB(db);
+  notice(req, "Đã cập nhật sản phẩm và mã hàng đã được mã hóa.");
+  res.redirect(`/admin?game=${encodeURIComponent(game)}`);
+});
+
+app.post("/admin/san-pham/:id/xoa", adminAuth, admin, (req, res) => {
+  const db = readDB();
+  const product = db.products.find(p => p.id === Number(req.params.id));
+  if (product) rememberGameCategory(db, product.game);
+  db.products = db.products.filter(p => p.id !== Number(req.params.id));
+  writeDB(db);
+  notice(req, "Đã xóa sản phẩm.");
+  res.redirect(product ? `/admin?game=${encodeURIComponent(product.game)}` : "/admin");
+});
+
 app.post("/admin/nap-tien/:id/duyet", adminAuth, admin, (req, res) => {
   const db = readDB();
   const topup = db.topups.find(t => String(t.id) === req.params.id);
@@ -890,68 +969,6 @@ app.post("/admin/nap-tien/:id/tu-choi", adminAuth, admin, (req, res) => {
   notice(req, `Đã từ chối yêu cầu nạp ${topup.bankReference || topup.id}.`);
   res.redirect("/admin");
 });
-  rememberGameCategory(db, game);
-  db.products.push({
-    id: Date.now(),
-    game,
-    name,
-    description,
-    image,
-    price,
-    accounts,
-    status: accounts.length > 0 ? "available" : "sold",
-    createdAt: new Date().toISOString()
-  });
-  writeDB(db);
-  notice(req, "Đã thêm sản phẩm.");
-  res.redirect(`/admin?game=${encodeURIComponent(game)}`);
-});
-
-app.post("/admin/san-pham/:id/cap-nhat", adminAuth, admin, (req, res) => {
-  const db = readDB();
-  const product = db.products.find(p => p.id === Number(req.params.id));
-  if (!product) {
-    notice(req, "Không tìm thấy sản phẩm.");
-    return res.redirect("/admin");
-  }
-  const game = String(req.body.game || "").trim();
-  const name = String(req.body.name || "").trim();
-  const description = String(req.body.description || "").trim();
-  const image = String(req.body.image || "").trim();
-  const price = Number(req.body.price);
-
-  let accounts;
-  try {
-    accounts = parseAccountEntries(req.body.accounts).map(account => encryptAccount(account));
-  } catch (error) {
-    notice(req, error.message);
-    return res.redirect("/admin");
-  }
-
-  if (!game || game.length > 60 || !name || name.length > 120 || description.length > 1000 || image.length > 500 ||
-    !Number.isInteger(price) || price < 1000 || price > 50000000) {
-    notice(req, "Thông tin sản phẩm không hợp lệ.");
-    return res.redirect("/admin");
-  }
-
-  rememberGameCategory(db, product.game);
-  rememberGameCategory(db, game);
-  appendAccounts(product, accounts);
-  Object.assign(product, { game, name, description, image, price });
-  writeDB(db);
-  notice(req, "Đã cập nhật sản phẩm và mã hàng đã được mã hóa.");
-  res.redirect(`/admin?game=${encodeURIComponent(game)}`);
-});
-
-app.post("/admin/san-pham/:id/xoa", adminAuth, admin, (req, res) => {
-  const db = readDB();
-  const product = db.products.find(p => p.id === Number(req.params.id));
-  if (product) rememberGameCategory(db, product.game);
-  db.products = db.products.filter(p => p.id !== Number(req.params.id));
-  writeDB(db);
-  notice(req, "Đã xóa sản phẩm.");
-  res.redirect(product ? `/admin?game=${encodeURIComponent(product.game)}` : "/admin");
-});
 
 app.post("/admin/thanh-vien/:id/so-du", adminAuth, admin, (req, res) => {
   const db = readDB();
@@ -1004,6 +1021,23 @@ app.post("/admin/thanh-vien/:id/so-du", adminAuth, admin, (req, res) => {
     req,
     `Đã ${action === "subtract" ? "trừ" : "cộng"} ${amount.toLocaleString("vi-VN")}₫ cho ${user.email}. Số dư mới: ${nextBalance.toLocaleString("vi-VN")}₫.`
   );
+  res.redirect("/admin");
+});
+
+app.post("/admin/thanh-vien/:id/xoa", adminAuth, admin, (req, res) => {
+  const db = readDB();
+  const userIndex = db.users.findIndex(user => String(user.id) === req.params.id);
+  if (userIndex < 0) {
+    notice(req, "Không tìm thấy thành viên.");
+    return res.redirect("/admin");
+  }
+  if (db.users[userIndex].role === "admin") {
+    notice(req, "Không thể xóa tài khoản quản trị.");
+    return res.redirect("/admin");
+  }
+  db.users.splice(userIndex, 1);
+  writeDB(db);
+  notice(req, "Đã xóa tài khoản thành viên. Lịch sử đơn hàng và giao dịch nạp tiền được giữ lại.");
   res.redirect("/admin");
 });
 
