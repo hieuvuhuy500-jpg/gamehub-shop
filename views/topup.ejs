@@ -5,40 +5,17 @@
     <h1>Nạp tiền vào ví</h1>
     <p>Số dư hiện tại: <b><%= money(user.balance) %></b></p>
   </div>
-  <form class="panel form-panel topup-form" method="post" action="/nap-tien">
-    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-    <label for="topup-amount">Số tiền (VNĐ)
-      <input id="topup-amount" type="number" name="amount" min="10000" max="50000000" step="1000" required placeholder="Ví dụ: 100000" <%= paymentReady?"":"disabled" %>>
-    </label>
-    <div class="amount-presets" aria-label="Chọn nhanh số tiền">
-      <button type="button" class="btn btn-outline" data-amount="50000" <%= paymentReady?"":"disabled" %>>50.000₫</button>
-      <button type="button" class="btn btn-outline" data-amount="100000" <%= paymentReady?"":"disabled" %>>100.000₫</button>
-      <button type="button" class="btn btn-outline" data-amount="200000" <%= paymentReady?"":"disabled" %>>200.000₫</button>
-    </div>
-    <% if(paymentReady){ %>
-      <div class="safe-note">Thanh toán được chuyển tới VNPay. Ví chỉ được cộng sau khi máy chủ xác minh thông báo IPN có chữ ký hợp lệ.</div>
-    <% }else{ %>
-      <div class="safe-note">VNPay chưa được cấu hình. Chưa thể nhận tiền: cần tài khoản merchant và URL HTTPS công khai cho trang kết quả và IPN. Không có số dư nào được tự tạo.</div>
-    <% } %>
-    <button class="btn btn-red full" type="submit" <%= paymentReady?"":"disabled" %>>Tiếp tục tới VNPay</button>
-  </form>
+
   <section class="panel topup-alternatives" aria-labelledby="topup-alternatives-title">
     <h2 id="topup-alternatives-title">Phương thức nạp khác</h2>
     <div class="topup-method-grid">
-      <article class="topup-method">
-        <div class="topup-method-heading">
-          <strong>Thẻ cào</strong>
-          <span class="topup-method-status">Chưa khả dụng</span>
-        </div>
-        <p>Cần kết nối cổng thẻ cào chính thức. Website không nhận số serial hoặc mã PIN thẻ.</p>
-      </article>
       <article class="topup-method">
         <div class="topup-method-heading">
           <strong>Chuyển khoản ngân hàng</strong>
           <span class="topup-method-status"><%= bankReady?"Đã cấu hình":"Chờ cấu hình" %></span>
         </div>
         <% if(bankReady){ %>
-          <p>Chuyển khoản bằng mã nội dung riêng. Ví chỉ được cộng sau khi SePay xác minh đúng số tiền và giao dịch.</p>
+          <p>Chuyển khoản bằng mã nội dung riêng. Ví chỉ được cộng sau khi SePay xác minh đúng số tiền và giao dịch hoặc được quản trị viên xác nhận.</p>
           <form method="post" action="/nap-tien/chuyen-khoan">
             <input type="hidden" name="_csrf" value="<%= csrfToken %>">
             <label for="bank-topup-amount">Số tiền (VNĐ)
@@ -51,7 +28,6 @@
         <% } %>
       </article>
     </div>
-    <p class="topup-method-notice">Các phương thức này chưa nhận tiền. Vui lòng không chuyển khoản hoặc gửi mã thẻ cho đến khi website thông báo đã mở.</p>
   </section>
 </main>
 <%- include("partials/footer") %>
