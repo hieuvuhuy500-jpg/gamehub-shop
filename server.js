@@ -203,7 +203,7 @@ app.use((req, res, next) => {
 });
 
 app.use((req, res, next) => {
-  if (req.method !== "POST" || req.path === "/api/ai/chat" || req.path === "/api/sepay/webhook") return next();
+  if (req.method !== "POST" || req.path === "/api/ai/chat" || req.path === "/api/sepay/webhook" || req.path === "/api/chat") return next();
   const expected = Buffer.from(String(req.session.csrfToken || ""));
   const supplied = Buffer.from(String(req.body?._csrf || ""));
   if (expected.length !== supplied.length || !crypto.timingSafeEqual(expected, supplied)) {
@@ -701,6 +701,77 @@ app.post("/api/sepay/webhook", (req, res) => {
 
 app.get("/bang-xep-hang", (req, res) => {
   res.render("leaderboard", { leaders: getLeaderboard(readDB()) });
+});
+
+app.get("/api/chat", auth, (req, res) => {
+  const db = readDB();
+  const currentUser = db.users.find(u => u.id === req.session.user.id);
+  if (!currentUser) return res.status(401).json({ error: "Chưa đăng nhập." });
+
+  if (currentUser.role === "admin") {
+    const targetUserId = Number(req.query.userId);
+    const customers = db.users
+      .filter(u => u.role !== "admin")
+      .map(u => {
+        const userMsgs = db.messages.filter(m => m.userId === u.id);
+        const lastMsg = userMsgs[userMsgs.length - 1] || null;
+        return {
+          id: u.id,
+          name: u.name,
+          email: u.email,
+          lastMessage: lastMsg ? lastMsg.text : "",
+          lastAt: lastMsg ? lastMsg.createdAt : ""
+        };
+      });
+
+    const activeUserId = targetUserId || (customers[0] ? customers[0].id : null);
+    const thread = activeUserId
+      ? db.messages.filter(m => m.userId === activeUserId)
+      : [];
+
+    return res.json({ customers, activeUserId, messages: thread });
+  }
+
+  const thread = db.messages.filter(m => m.userId === currentUser.id);
+  return res.json({ messages: thread });
+});
+
+app.post("/api/chat", auth, (req, res) => {
+  const db = readDB();
+  const currentUser = db.users.find(u => u.id === req.session.user.id);
+  if (!currentUser) return res.status(401).json({ error: "Chưa đăng nhập." });
+
+  const text = String(req.body?.text || "").trim();
+  if (!text || text.length > 1000) {
+    return res.status(400).json({ error: "Tin nhắn phải từ 1 đến 1.000 ký tự." });
+  }
+
+  let threadUserId = currentUser.id;
+  let senderRole = "user";
+  let senderName = currentUser.name;
+
+  if (currentUser.role === "admin") {
+    threadUserId = Number(req.body?.userId);
+    const customer = db.users.find(u => u.id === threadUserId && u.role !== "admin");
+    if (!customer) {
+      return res.status(400).json({ error: "Vui lòng chọn người mua cần trả lời." });
+    }
+    senderRole = "admin";
+    senderName = currentUser.name || "Quản trị viên";
+  }
+
+  const msg = {
+    id: Date.now() + Math.floor(Math.random() * 1000),
+    userId: threadUserId,
+    senderRole,
+    senderName,
+    text,
+    createdAt: new Date().toISOString()
+  };
+
+  db.messages.push(msg);
+  writeDB(db);
+  return res.status(201).json({ message: msg });
 });
 
 app.post("/api/ai/chat", async (req, res) => {
