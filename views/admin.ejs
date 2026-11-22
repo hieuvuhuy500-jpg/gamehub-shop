@@ -3,7 +3,7 @@
   <div class="page-title">
     <span class="eyebrow red">CONTROL CENTER</span>
     <h1>Quản trị hệ thống</h1>
-    <p>Quản lý danh mục, kho tài khoản, đơn hàng và giao dịch VNPay.</p>
+    <p>Quản lý danh mục, kho tài khoản, đơn hàng và giao dịch nạp tiền.</p>
   </div>
 
   <div class="stats admin-stats">
@@ -13,7 +13,26 @@
     <div class="stat"><small>Đơn hàng</small><strong><%= stats.orders %></strong></div>
     <div class="stat"><small>Doanh thu</small><strong><%= money(stats.revenue) %></strong></div>
   </div>
-<section class="panel" style="border:2px solid #f59e0b;">
+
+  <section class="panel" id="admin-chat-box">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;">
+      <h2 style="margin:0;">Tin nhắn người mua</h2>
+      <span class="pill green">Trực tiếp</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;">
+      <div id="admin-customer-list" style="display:flex;flex-direction:column;gap:8px;max-height:320px;overflow-y:auto;"></div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <div id="admin-chat-thread" style="display:flex;flex-direction:column;gap:8px;min-height:220px;max-height:280px;overflow-y:auto;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);"></div>
+        <form id="admin-chat-form" style="display:flex;gap:8px;">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <input id="admin-chat-input" type="text" maxlength="1000" required placeholder="Chọn người mua và nhập tin nhắn trả lời...">
+          <button class="btn btn-red" type="submit">Trả lời</button>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" style="border:2px solid #f59e0b;">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
       <h2 style="margin:0;">Yêu cầu nạp tiền chờ xác nhận (<%= stats.pendingTopupsCount || 0 %>)</h2>
       <strong>Tổng cần xác nhận: <%= money(stats.pendingTopupsAmount || 0) %></strong>
@@ -59,6 +78,7 @@
       </div>
     <% } %>
   </section>
+
   <section class="panel">
     <h2>Danh mục và tồn kho</h2>
     <p class="admin-help">Tồn kho được tính từ số tài khoản đã nhập mã hóa. Danh mục game vẫn được giữ lại sau khi xóa sản phẩm để bạn có thể thêm hàng sau.</p>
@@ -184,15 +204,15 @@
               <td><%= u.name %></td><td><%= u.email %></td><td><%= money(u.balance) %></td>
               <td>
                 <form method="POST" action="/admin/thanh-vien/<%= u.id %>/so-du" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:6px;">
-  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-  <select name="action" style="padding:4px 6px;">
-    <option value="add">Cộng (+)</option>
-    <option value="subtract">Trừ (-)</option>
-  </select>
-  <input type="number" name="amount" min="1000" max="100000000" step="1000" placeholder="Số tiền (VNĐ)" required style="width:120px;padding:4px 6px;">
-  <input type="text" name="note" maxlength="200" placeholder="Ghi chú" style="width:130px;padding:4px 6px;">
-  <button type="submit" style="padding:4px 10px;cursor:pointer;">Cập nhật</button>
-</form>
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <select name="action" style="padding:4px 6px;">
+                    <option value="add">Cộng (+)</option>
+                    <option value="subtract">Trừ (-)</option>
+                  </select>
+                  <input type="number" name="amount" min="1000" max="100000000" step="1000" placeholder="Số tiền (VNĐ)" required style="width:120px;padding:4px 6px;">
+                  <input type="text" name="note" maxlength="200" placeholder="Ghi chú" style="width:130px;padding:4px 6px;">
+                  <button type="submit" style="padding:4px 10px;cursor:pointer;">Cập nhật</button>
+                </form>
               </td>
             </tr>
           <% }) %>
@@ -202,4 +222,77 @@
     </div>
   </section>
 </main>
+
+<script>
+  (() => {
+    const custEl = document.getElementById("admin-customer-list");
+    const threadEl = document.getElementById("admin-chat-thread");
+    const formEl = document.getElementById("admin-chat-form");
+    const inputEl = document.getElementById("admin-chat-input");
+    if (!custEl || !threadEl || !formEl || !inputEl) return;
+
+    const csrfToken = formEl.querySelector('input[name="_csrf"]')?.value || "";
+    const escapeHtml = s => String(s || "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    let selectedUserId = null;
+
+    const loadAdminChat = async (userId = selectedUserId) => {
+      try {
+        const url = userId ? `/api/chat?userId=${encodeURIComponent(userId)}` : "/api/chat";
+        const res = await fetch(url);
+        if (!res.ok) return;
+        const data = await res.json();
+        selectedUserId = data.activeUserId || null;
+
+        const customers = data.customers || [];
+        custEl.innerHTML = customers.length
+          ? customers.map(c => `
+              <button type="button" data-uid="${c.id}" class="btn btn-outline" style="justify-content:flex-start;flex-direction:column;align-items:flex-start;border-radius:10px;padding:10px;${String(c.id) === String(selectedUserId) ? "border-color:var(--red);" : ""}">
+                <strong>${escapeHtml(c.name)}</strong>
+                <span style="font-size:11px;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">${escapeHtml(c.lastMessage || c.email)}</span>
+              </button>
+            `).join("")
+          : '<p class="empty">Chưa có người mua nào.</p>';
+
+        custEl.querySelectorAll("[data-uid]").forEach(btn => {
+          btn.addEventListener("click", () => {
+            selectedUserId = Number(btn.getAttribute("data-uid"));
+            loadAdminChat(selectedUserId);
+          });
+        });
+
+        const msgs = data.messages || [];
+        threadEl.innerHTML = msgs.length
+          ? msgs.map(m => {
+              const isAdmin = m.senderRole === "admin";
+              const timeStr = new Date(m.createdAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+              return `
+                <div style="align-self:${isAdmin ? "flex-end" : "flex-start"};max-width:82%;padding:9px 12px;border-radius:12px;background:${isAdmin ? "var(--red)" : "#171923"};color:#fff;">
+                  <div style="font-size:10px;opacity:.8;margin-bottom:3px;">${escapeHtml(m.senderName)} • ${timeStr}</div>
+                  <div style="font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere;">${escapeHtml(m.text)}</div>
+                </div>
+              `;
+            }).join("")
+          : '<p class="empty" style="margin:0;">Chưa có tin nhắn trong cuộc trò chuyện này.</p>';
+        threadEl.scrollTop = threadEl.scrollHeight;
+      } catch {}
+    };
+
+    formEl.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (!selectedUserId) return;
+      const text = inputEl.value.trim();
+      if (!text) return;
+      inputEl.value = "";
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ _csrf: csrfToken, userId: selectedUserId, text })
+      });
+      if (res.ok) await loadAdminChat(selectedUserId);
+    });
+
+    loadAdminChat();
+    setInterval(() => loadAdminChat(selectedUserId), 4000);
+  })();
+</script>
 <%- include("partials/footer") %>

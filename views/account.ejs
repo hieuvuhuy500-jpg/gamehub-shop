@@ -63,6 +63,19 @@
     </div>
   </section>
 
+  <section class="panel" id="buyer-chat-box" style="margin-bottom:24px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;">
+      <h2 style="margin:0;">Trò chuyện với shop</h2>
+      <span class="pill green">Trực tiếp</span>
+    </div>
+    <div id="buyer-chat-messages" style="display:flex;flex-direction:column;gap:8px;max-height:280px;overflow-y:auto;padding:12px;border:1px solid var(--line);border-radius:10px;margin-bottom:12px;background:var(--bg);"></div>
+    <form id="buyer-chat-form" style="display:flex;gap:8px;">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <input id="buyer-chat-input" type="text" maxlength="1000" required placeholder="Nhập tin nhắn gửi shop (VD: hỏi tài khoản, mã đơn hàng)...">
+      <button class="btn btn-red" type="submit">Gửi</button>
+    </form>
+  </section>
+
   <section class="panel" style="margin-bottom:24px;">
     <h2>Tài khoản đã mua &amp; Lịch sử mua hàng (<%= orders.length %>)</h2>
     <% if (!orders || orders.length === 0) { %>
@@ -185,5 +198,58 @@
       reader.readAsDataURL(file);
     });
   }
+
+  (() => {
+    const listEl = document.getElementById("buyer-chat-messages");
+    const formEl = document.getElementById("buyer-chat-form");
+    const inputEl = document.getElementById("buyer-chat-input");
+    if (!listEl || !formEl || !inputEl) return;
+
+    const csrfToken = formEl.querySelector('input[name="_csrf"]')?.value || "";
+    const escapeHtml = s => String(s || "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+    const renderMessages = (items) => {
+      if (!items.length) {
+        listEl.innerHTML = '<p class="empty" style="margin:0;">Chưa có tin nhắn nào. Hãy nhắn cho shop để được hỗ trợ.</p>';
+        return;
+      }
+      listEl.innerHTML = items.map(m => {
+        const isMine = m.senderRole === "user";
+        const timeStr = new Date(m.createdAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+        return `
+          <div style="align-self:${isMine ? "flex-end" : "flex-start"};max-width:82%;padding:9px 12px;border-radius:12px;background:${isMine ? "var(--red)" : "#171923"};color:#fff;">
+            <div style="font-size:10px;opacity:.8;margin-bottom:3px;">${escapeHtml(m.senderName)} • ${timeStr}</div>
+            <div style="font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere;">${escapeHtml(m.text)}</div>
+          </div>
+        `;
+      }).join("");
+      listEl.scrollTop = listEl.scrollHeight;
+    };
+
+    const loadChat = async () => {
+      try {
+        const res = await fetch("/api/chat", { headers: { "Accept": "application/json" } });
+        if (!res.ok) return;
+        const data = await res.json();
+        renderMessages(data.messages || []);
+      } catch {}
+    };
+
+    formEl.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const text = inputEl.value.trim();
+      if (!text) return;
+      inputEl.value = "";
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ _csrf: csrfToken, text })
+      });
+      if (res.ok) await loadChat();
+    });
+
+    loadChat();
+    setInterval(loadChat, 4000);
+  })();
 </script>
 <%- include("partials/footer") %>
