@@ -5,7 +5,7 @@
 2. Chạy `npm install`.
 3. Sao chép `.env.example` thành `.env`; tự đặt `ADMIN_EMAIL`, `ADMIN_PASSWORD` và `SESSION_SECRET`.
 4. Chạy `npm run dev` hoặc `npm start`.
-5. Mở `http://localhost:3000`.
+5. Mở `http://gtngaming.com`.
 
 Chế độ `npm run dev` bỏ qua thư mục dữ liệu để Nodemon không khởi động lại máy chủ khi có đơn hàng hoặc sản phẩm mới.
 Lần đầu chạy, ứng dụng tạo tài khoản quản trị từ `ADMIN_EMAIL` và `ADMIN_PASSWORD`. Admin và khách đăng nhập tại `/dang-nhap`; tài khoản có quyền `admin` sẽ tự chuyển vào `/admin`, còn khách được chuyển đến trang tài khoản. Khu vực Admin không hiển thị trên giao diện khách và được bảo vệ theo quyền tài khoản. Không gửi nội dung `.env` hoặc khóa bí mật qua chat.
